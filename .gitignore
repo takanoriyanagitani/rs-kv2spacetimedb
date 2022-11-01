@@ -10,3 +10,4 @@ Cargo.lock
 **/*.rs.bk
 *.swp
 examples/rdb/postgresql/target/
+*.profraw
