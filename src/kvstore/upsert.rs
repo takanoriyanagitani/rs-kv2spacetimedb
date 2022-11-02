@@ -83,6 +83,13 @@ where
         .try_fold(0, |tot, item| upsert(b, item).map(|cnt| cnt + tot))
 }
 
+/// Saves data got from source which uses a closure to actually save data.
+///
+/// Duplicates will be ignored.
+///
+/// # Arguments
+/// - source: `RawData` source iterator.
+/// - upsert: Data saver which saves data into specified bucket.
 pub fn upsert_all<I, U>(source: I, upsert: &mut U) -> Result<u64, Event>
 where
     I: Iterator<Item = RawData>,
