@@ -10,8 +10,8 @@ use rs_kv2spacetimedb::{
 
 use rusqlite::{params, Connection, Transaction};
 
-fn sqlite3_upsert_new() -> impl Fn(&mut Transaction, &Bucket, &RawItem) -> Result<u64, Event> {
-    move |t: &mut Transaction, b: &Bucket, i: &RawItem| {
+fn sqlite3_upsert_new() -> impl Fn(&Transaction, &Bucket, &RawItem) -> Result<u64, Event> {
+    move |t: &Transaction, b: &Bucket, i: &RawItem| {
         let key: &[u8] = i.as_key();
         let val: &[u8] = i.as_val();
         let query: String = format!(
@@ -32,12 +32,12 @@ fn sqlite3_upsert_new() -> impl Fn(&mut Transaction, &Bucket, &RawItem) -> Resul
     }
 }
 
-fn sqlite3_upsert_all<I>(source: I, mut tx: Transaction) -> Result<u64, Event>
+fn sqlite3_upsert_all<I>(source: I, tx: Transaction) -> Result<u64, Event>
 where
     I: Iterator<Item = RawData>,
 {
     let f = sqlite3_upsert_new();
-    let mut g = |b: &Bucket, i: &RawItem| f(&mut tx, b, i);
+    let mut g = |b: &Bucket, i: &RawItem| f(&tx, b, i);
     let cnt: u64 = upsert_all(source, &mut g)?;
     tx.commit()
         .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))?;
