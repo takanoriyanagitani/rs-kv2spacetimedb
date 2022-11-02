@@ -3,14 +3,25 @@
 export CARGO_INCREMENTAL=0
 export RUSTC_BOOTSTRAP=1
 
-export RUSTFLAGS=-Cinstrument-coverage
+export RUSTFLAGS=""
 export RUSTFLAGS="$RUSTFLAGS -Zprofile"
 export RUSTFLAGS="$RUSTFLAGS -Ccodegen-units=1"
+export RUSTFLAGS="$RUSTFLAGS -Cinline-threshold=0"
 export RUSTFLAGS="$RUSTFLAGS -Copt-level=0"
 export RUSTFLAGS="$RUSTFLAGS -Clink-dead-code"
 export RUSTFLAGS="$RUSTFLAGS -Coverflow-checks=off"
 export RUSTFLAGS="$RUSTFLAGS -Zpanic_abort_tests"
 export RUSTFLAGS="$RUSTFLAGS -Cpanic=abort"
+export RUSTFLAGS="$RUSTFLAGS -Cinstrument-coverage=all"
+
+export RUSTDOCFLAGS=""
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Zprofile"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Ccodegen-units=1"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Cinline-threshold=0"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Clink-dead-code"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Coverflow-checks=off"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Cpanic=abort"
+export RUSTDOCFLAGS="$RUSTDOCFLAGS -Zpanic_abort_tests"
 
 cargo build --verbose $CARGO_OPTIONS
 
