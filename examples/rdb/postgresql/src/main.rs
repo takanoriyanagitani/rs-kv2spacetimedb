@@ -1,20 +1,18 @@
-use std::collections::BTreeMap;
 use std::env;
 
+use rs_kv2spacetimedb::data::{Data, RawData};
 use rs_kv2spacetimedb::item::{Item, RawItem};
-use rs_kv2spacetimedb::{
-    bucket::Bucket, data::Data, data::RawData, date::Date, device::Device, evt::Event,
-};
+use rs_kv2spacetimedb::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::upsert::{upsert_all_new, UpsertRequest};
+use rs_kv2spacetimedb::kvstore::upsert::upsert_all;
 
 use postgres::{Client, Config, NoTls, Transaction};
 
-fn pg_upsert_all<I>(requests: I, mut t: Transaction) -> Result<u64, Event>
+fn pg_upsert_all<I>(source: I, mut t: Transaction) -> Result<u64, Event>
 where
-    I: Iterator<Item = (Bucket, Vec<RawItem>)>,
+    I: Iterator<Item = RawData>,
 {
-    let upst = |b: &Bucket, i: &RawItem| {
+    let mut upst = |b: &Bucket, i: &RawItem| {
         let key: &[u8] = i.as_key();
         let val: &[u8] = i.as_val();
         let query: String = format!(
@@ -32,30 +30,20 @@ where
         t.execute(query.as_str(), &[&key, &val])
             .map_err(|e| Event::UnexpectedError(format!("Unable to upsert: {}", e)))
     };
-    let mut f = upsert_all_new(upst);
-    let cnt: u64 = f(requests)?;
-    drop(f);
+    let cnt: u64 = upsert_all(source, &mut upst)?;
     t.commit()
         .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))?;
     Ok(cnt)
 }
 
-fn pg_upsert<I>(requests: I, c: &mut Client) -> Result<u64, Event>
+fn pg_upsert<I>(source: I, c: &mut Client) -> Result<u64, Event>
 where
-    I: Iterator<Item = (Bucket, Vec<RawItem>)>,
+    I: Iterator<Item = RawData>,
 {
     let tx: Transaction = c
         .transaction()
         .map_err(|e| Event::UnexpectedError(format!("Unable to start transaction: {}", e)))?;
-    pg_upsert_all(requests, tx)
-}
-
-fn rawdata2requests<I>(i: I) -> impl Iterator<Item = (Bucket, Vec<RawItem>)>
-where
-    I: Iterator<Item = RawData>,
-{
-    let m: BTreeMap<Bucket, Vec<RawItem>> = UpsertRequest::bulkdata2map(i);
-    m.into_iter()
+    pg_upsert_all(source, tx)
 }
 
 fn sub() -> Result<(), Event> {
@@ -106,9 +94,7 @@ fn sub() -> Result<(), Event> {
         ),
     )];
 
-    let requests = rawdata2requests(raws.into_iter());
-
-    let cnt: u64 = pg_upsert(requests, &mut c)?;
+    let cnt: u64 = pg_upsert(raws.into_iter(), &mut c)?;
     println!("upserted: {}", cnt);
     Ok(())
 }

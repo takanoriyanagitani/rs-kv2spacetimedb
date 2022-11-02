@@ -3,19 +3,19 @@ use std::collections::BTreeMap;
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, data::RawData, date::Date, device::Device, evt::Event};
 
-pub struct UpsertRequest<K, V> {
+struct UpsertRequest<K, V> {
     bucket: Bucket,
     item: Item<K, V>,
 }
 
 impl<K, V> UpsertRequest<K, V> {
-    pub fn new(bucket: Bucket, item: Item<K, V>) -> Self {
+    fn new(bucket: Bucket, item: Item<K, V>) -> Self {
         Self { bucket, item }
     }
 }
 
 impl UpsertRequest<Vec<u8>, Vec<u8>> {
-    pub fn from_data(d: RawData) -> Vec<Self> {
+    fn from_data(d: RawData) -> Vec<Self> {
         let dev: &Device = d.as_device();
         let date: &Date = d.as_date();
 
@@ -43,7 +43,7 @@ impl UpsertRequest<Vec<u8>, Vec<u8>> {
         ]
     }
 
-    pub fn bulkdata2map<I>(bulk: I) -> BTreeMap<Bucket, Vec<RawItem>>
+    fn bulkdata2map<I>(bulk: I) -> BTreeMap<Bucket, Vec<RawItem>>
     where
         I: Iterator<Item = RawData>,
     {
@@ -66,6 +66,14 @@ impl UpsertRequest<Vec<u8>, Vec<u8>> {
     }
 }
 
+fn rawdata2requests<I>(i: I) -> impl Iterator<Item = (Bucket, Vec<RawItem>)>
+where
+    I: Iterator<Item = RawData>,
+{
+    let m: BTreeMap<Bucket, Vec<RawItem>> = UpsertRequest::bulkdata2map(i);
+    m.into_iter()
+}
+
 fn upsert_into_bucket<U>(b: &Bucket, items: &[RawItem], upsert: &mut U) -> Result<u64, Event>
 where
     U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
@@ -75,16 +83,15 @@ where
         .try_fold(0, |tot, item| upsert(b, item).map(|cnt| cnt + tot))
 }
 
-pub fn upsert_all_new<I, U>(mut upsert: U) -> impl FnMut(I) -> Result<u64, Event>
+pub fn upsert_all<I, U>(source: I, upsert: &mut U) -> Result<u64, Event>
 where
-    I: Iterator<Item = (Bucket, Vec<RawItem>)>,
+    I: Iterator<Item = RawData>,
     U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
 {
-    move |mut requests: I| {
-        requests.try_fold(0, |tot, req| {
-            let (bucket, v) = req;
-            let uniq: Vec<RawItem> = Item::uniq(v);
-            upsert_into_bucket(&bucket, &uniq, &mut upsert).map(|cnt| cnt + tot)
-        })
-    }
+    let mut requests = rawdata2requests(source);
+    requests.try_fold(0, |tot, req| {
+        let (bucket, v) = req;
+        let uniq: Vec<RawItem> = Item::uniq(v);
+        upsert_into_bucket(&bucket, &uniq, upsert).map(|cnt| cnt + tot)
+    })
 }
