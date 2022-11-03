@@ -102,3 +102,22 @@ where
         upsert_into_bucket(&bucket, &uniq, upsert).map(|cnt| cnt + tot)
     })
 }
+
+#[cfg(test)]
+mod test_upsert {
+
+    mod upsert_all {
+
+        use crate::bucket::Bucket;
+        use crate::item::RawItem;
+        use crate::kvstore::upsert;
+
+        #[test]
+        fn test_empty() {
+            let mut upst = |_b: &Bucket, _i: &RawItem| Ok(1);
+            let source = vec![].into_iter();
+            let upserted: u64 = upsert::upsert_all(source, &mut upst).unwrap();
+            assert_eq!(0, upserted);
+        }
+    }
+}
