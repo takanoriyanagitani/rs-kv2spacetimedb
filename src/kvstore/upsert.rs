@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::ops::DerefMut;
+use std::sync::Mutex;
 
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, data::RawData, date::Date, device::Device, evt::Event};
@@ -121,6 +123,54 @@ where
         let cnt_u: u64 = upsert(b, i)?;
         Ok(cnt_c + cnt_u)
     }
+}
+
+/// Handles create/upsert requests which uses shared resource protected by mutex.
+///
+/// # Arguments
+/// - source: Data to be upserted.
+/// - create: Handles create request.
+/// - upsert: Handles upsert request.
+/// - shared_resource: Vendor specific shared resource to be protected by mutex.
+/// - finalize: Vendor specific finalization for the shared resource.
+pub fn create_upsert_all_shared<I, C, U, T, F>(
+    source: I,
+    create: C,
+    upsert: U,
+    shared_resource: T,
+    finalize: F,
+) -> Result<u64, Event>
+where
+    I: Iterator<Item = RawData>,
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    let mt: Mutex<T> = Mutex::new(shared_resource);
+
+    let c = |b: &Bucket| {
+        let mut l = mt
+            .lock()
+            .map_err(|e| Event::UnexpectedError(format!("Unable to create while upsert: {}", e)))?;
+        let t: &mut T = l.deref_mut();
+        create(t, b)
+    };
+    let u = |b: &Bucket, i: &RawItem| {
+        let mut l = mt
+            .lock()
+            .map_err(|e| Event::UnexpectedError(format!("Unable to create while upsert: {}", e)))?;
+        let t: &mut T = l.deref_mut();
+        upsert(t, b, i)
+    };
+    let mut cu = create_upsert_new(c, u);
+    let cnt: u64 = upsert_all(source, &mut cu)?;
+    drop(cu);
+
+    let t: T = mt
+        .into_inner()
+        .map_err(|e| Event::UnexpectedError(format!("Unable to prepare finalization: {}", e)))?;
+    finalize(t)?;
+    Ok(cnt)
 }
 
 #[cfg(test)]

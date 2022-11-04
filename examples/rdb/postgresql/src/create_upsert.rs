@@ -1,70 +1,36 @@
 use std::env;
-use std::ops::DerefMut;
-use std::sync::Mutex;
 
 use rs_kv2spacetimedb::data::{Data, RawData};
 use rs_kv2spacetimedb::item::{Item, RawItem};
 use rs_kv2spacetimedb::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::upsert::{create_upsert_new, upsert_all};
+use rs_kv2spacetimedb::kvstore::upsert::create_upsert_all_shared;
 
 use postgres::{Client, Config, NoTls, Transaction};
 
-fn pg_create(t: &mut Transaction, query: &str) -> Result<u64, Event> {
-    t.execute(query, &[])
-        .map_err(|e| Event::UnexpectedError(format!("Unable to create a bucket: {}", e)))
-}
-
-fn pg_upsert(t: &mut Transaction, query: &str, i: &RawItem) -> Result<u64, Event> {
-    let key: &[u8] = i.as_key();
-    let val: &[u8] = i.as_val();
-    t.execute(query, &[&key, &val])
-        .map_err(|e| Event::UnexpectedError(format!("Unable to upsert: {}", e)))
-}
-
-fn pg_create_upsert<I, C, U>(
-    requests: I,
-    create: C,
-    upsert: U,
-    t: Transaction,
-) -> Result<u64, Event>
+fn pg_create_upsert<I, C, U>(source: I, create: C, upsert: U, t: Transaction) -> Result<u64, Event>
 where
     I: Iterator<Item = RawData>,
     C: Fn(&Bucket) -> Result<String, Event>,
     U: Fn(&Bucket) -> Result<String, Event>,
 {
-    let mt: Mutex<Transaction> = Mutex::new(t);
-
-    let c = |b: &Bucket| {
-        let mut l = mt
-            .lock()
-            .map_err(|e| Event::UnexpectedError(format!("Unable to insert while upsert: {}", e)))?;
-        let t: &mut Transaction = l.deref_mut();
+    let c = |t: &mut Transaction, b: &Bucket| {
         let query: String = create(b)?;
-        pg_create(t, query.as_str())
+        t.execute(query.as_str(), &[])
+            .map_err(|e| Event::UnexpectedError(format!("Unable to create a bucket: {}", e)))
     };
-
-    let u = |b: &Bucket, i: &RawItem| {
-        let mut l = mt
-            .lock()
-            .map_err(|e| Event::UnexpectedError(format!("Unable to upsert while insert: {}", e)))?;
-        let t: &mut Transaction = l.deref_mut();
+    let u = |t: &mut Transaction, b: &Bucket, i: &RawItem| {
+        let key: &[u8] = i.as_key();
+        let val: &[u8] = i.as_val();
         let query: String = upsert(b)?;
-        pg_upsert(t, query.as_str(), i)
+        t.execute(query.as_str(), &[&key, &val])
+            .map_err(|e| Event::UnexpectedError(format!("Unable to upsert: {}", e)))
     };
-
-    let mut cu = create_upsert_new(c, u);
-
-    let cnt: u64 = upsert_all(requests, &mut cu)?;
-
-    drop(cu);
-
-    let t: Transaction = mt
-        .into_inner()
-        .map_err(|_| Event::UnexpectedError("Unable to get transaction".into()))?;
-    t.commit()
-        .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))?;
-    Ok(cnt)
+    let commit = |t: Transaction| {
+        t.commit()
+            .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))
+    };
+    create_upsert_all_shared(source, c, u, t, commit)
 }
 
 fn create_query_new() -> impl Fn(&Bucket) -> Result<String, Event> {
