@@ -173,6 +173,18 @@ where
     Ok(cnt)
 }
 
+/// Creates new create handler which uses closures to create or skip bucket creation.
+///
+/// - create: Creates a bucket.
+/// - cache:  Returns Ok(0) when a bucket already exists, Err otherwise.
+pub fn create_cached_new<C, M>(mut create: C, cache: M) -> impl FnMut(&Bucket) -> Result<u64, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+    M: Fn(&Bucket) -> Result<u64, Event>,
+{
+    move |b: &Bucket| cache(b).or_else(|_| create(b))
+}
+
 #[cfg(test)]
 mod test_upsert {
 
