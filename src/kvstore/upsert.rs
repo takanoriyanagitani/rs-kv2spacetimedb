@@ -103,6 +103,26 @@ where
     })
 }
 
+/// Creates new upsert handler which uses closures to do create/upsert.
+///
+/// # Arguments
+/// - create: Creates a bucket.
+/// - upsert: Handles upsert request.
+pub fn create_upsert_new<C, U>(
+    mut create: C,
+    mut upsert: U,
+) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+    U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
+{
+    move |b: &Bucket, i: &RawItem| {
+        let cnt_c: u64 = create(b)?;
+        let cnt_u: u64 = upsert(b, i)?;
+        Ok(cnt_c + cnt_u)
+    }
+}
+
 #[cfg(test)]
 mod test_upsert {
 

@@ -6,24 +6,9 @@ use rs_kv2spacetimedb::data::{Data, RawData};
 use rs_kv2spacetimedb::item::{Item, RawItem};
 use rs_kv2spacetimedb::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::upsert::upsert_all;
+use rs_kv2spacetimedb::kvstore::upsert::{create_upsert_new, upsert_all};
 
 use postgres::{Client, Config, NoTls, Transaction};
-
-fn create_upsert_new<C, U>(
-    mut create: C,
-    mut upsert: U,
-) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
-where
-    C: FnMut(&Bucket) -> Result<u64, Event>,
-    U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
-{
-    move |b: &Bucket, i: &RawItem| {
-        let cnt_c: u64 = create(b)?;
-        let cnt_u: u64 = upsert(b, i)?;
-        Ok(cnt_c + cnt_u)
-    }
-}
 
 fn pg_create_upsert<I, C, U>(
     requests: I,
