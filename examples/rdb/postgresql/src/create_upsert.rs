@@ -10,6 +10,18 @@ use rs_kv2spacetimedb::kvstore::upsert::{create_upsert_new, upsert_all};
 
 use postgres::{Client, Config, NoTls, Transaction};
 
+fn pg_create(t: &mut Transaction, query: &str) -> Result<u64, Event> {
+    t.execute(query, &[])
+        .map_err(|e| Event::UnexpectedError(format!("Unable to create a bucket: {}", e)))
+}
+
+fn pg_upsert(t: &mut Transaction, query: &str, i: &RawItem) -> Result<u64, Event> {
+    let key: &[u8] = i.as_key();
+    let val: &[u8] = i.as_val();
+    t.execute(query, &[&key, &val])
+        .map_err(|e| Event::UnexpectedError(format!("Unable to upsert: {}", e)))
+}
+
 fn pg_create_upsert<I, C, U>(
     requests: I,
     create: C,
@@ -29,8 +41,7 @@ where
             .map_err(|e| Event::UnexpectedError(format!("Unable to insert while upsert: {}", e)))?;
         let t: &mut Transaction = l.deref_mut();
         let query: String = create(b)?;
-        t.execute(query.as_str(), &[])
-            .map_err(|e| Event::UnexpectedError(format!("Unable to create a bucket: {}", e)))
+        pg_create(t, query.as_str())
     };
 
     let u = |b: &Bucket, i: &RawItem| {
@@ -39,10 +50,7 @@ where
             .map_err(|e| Event::UnexpectedError(format!("Unable to upsert while insert: {}", e)))?;
         let t: &mut Transaction = l.deref_mut();
         let query: String = upsert(b)?;
-        let key: &[u8] = i.as_key();
-        let val: &[u8] = i.as_val();
-        t.execute(query.as_str(), &[&key, &val])
-            .map_err(|e| Event::UnexpectedError(format!("Unable to create a bucket: {}", e)))
+        pg_upsert(t, query.as_str(), i)
     };
 
     let mut cu = create_upsert_new(c, u);
