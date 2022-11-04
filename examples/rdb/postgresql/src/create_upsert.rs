@@ -54,7 +54,8 @@ where
     let t: Transaction = mt
         .into_inner()
         .map_err(|_| Event::UnexpectedError("Unable to get transaction".into()))?;
-    t.commit().unwrap();
+    t.commit()
+        .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))?;
     Ok(cnt)
 }
 
@@ -119,7 +120,9 @@ pub fn create_upsert() -> Result<(), Event> {
         ),
     )];
 
-    let t = c.transaction().unwrap();
+    let t: Transaction = c
+        .transaction()
+        .map_err(|e| Event::UnexpectedError(format!("Unable to start transaction: {}", e)))?;
 
     let cnt: u64 = pg_create_upsert(raws.into_iter(), bc, bu, t)?;
     println!("upserted: {}", cnt);
