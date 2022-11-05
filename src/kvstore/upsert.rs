@@ -202,4 +202,20 @@ mod test_upsert {
             assert_eq!(0, upserted);
         }
     }
+
+    mod create_cached_new {
+        use crate::bucket::Bucket;
+        use crate::evt::Event;
+        use crate::kvstore::upsert;
+
+        #[test]
+        fn test_table_exists() {
+            let m = |_: &Bucket| Ok(0);
+            let c = |_: &Bucket| Err(Event::UnexpectedError(String::from("Must not call me")));
+            let mut f = upsert::create_cached_new(c, m);
+            let b: Bucket = Bucket::from(String::from(""));
+            let cnt: u64 = f(&b).unwrap();
+            assert_eq!(cnt, 0);
+        }
+    }
 }
