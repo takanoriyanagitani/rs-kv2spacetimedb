@@ -5,3 +5,4 @@ pub mod device;
 pub mod evt;
 pub mod item;
 pub mod kvstore;
+pub mod remove;

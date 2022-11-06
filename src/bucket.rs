@@ -1,4 +1,4 @@
-use crate::{date::Date, device::Device};
+use crate::{date::Date, device::Device, evt::Event};
 
 /// ID(name) of a container which may contain many key/value pairs.
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
@@ -123,5 +123,14 @@ impl From<Bucket> for String {
 impl From<String> for Bucket {
     fn from(name: String) -> Self {
         Self { name }
+    }
+}
+
+impl TryFrom<&[u8]> for Bucket {
+    type Error = Event;
+    fn try_from(raw_name: &[u8]) -> Result<Self, Self::Error> {
+        let name: &str = std::str::from_utf8(raw_name)
+            .map_err(|_| Event::InvalidBucket(format!("rejected bytes: {:#?}", raw_name)))?;
+        Ok(Self::from(String::from(name)))
     }
 }
