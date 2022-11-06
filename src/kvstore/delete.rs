@@ -1,3 +1,6 @@
+use std::ops::DerefMut;
+use std::sync::Mutex;
+
 use crate::remove::{is_delete_target, is_drop_target};
 use crate::{bucket::Bucket, date::Date, evt::Event};
 
@@ -56,4 +59,60 @@ where
     R: FnMut(&Bucket, &[u8]) -> Result<u64, Event>,
 {
     remove_by_date(sel, drp, del, d, &is_drop_target, &is_delete_target)
+}
+
+/// Drops buckets and deletes rows which uses default closures with shared resource.
+///
+/// # Arguments
+/// - sel: Gets all buckets.
+/// - drp: Drop a bucket.
+/// - del: Delete a row from a bucket.
+/// - d:   Target `Date`.
+/// - t:   Vendor specific shared resource(example: Transaction object).
+/// - finalize: Commit changes using the shared resource
+pub fn remove_by_date_default_shared<S, D, R, T, F>(
+    sel: &mut S,
+    drp: &mut D,
+    del: &mut R,
+    d: &Date,
+    t: T,
+    finalize: &F,
+) -> Result<u64, Event>
+where
+    S: FnMut(&mut T) -> Result<Vec<Bucket>, Event>,
+    D: FnMut(&mut T, &Bucket) -> Result<u64, Event>,
+    R: FnMut(&mut T, &Bucket, &[u8]) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    let mt: Mutex<T> = Mutex::new(t);
+    let mut rbd = || {
+        let mut fsel = || {
+            let mut g = mt.lock().map_err(|e| {
+                Event::UnexpectedError(format!("Unable to get a shared resource: {}", e))
+            })?;
+            let m: &mut T = g.deref_mut();
+            sel(m)
+        };
+        let mut fdrp = |b: &Bucket| {
+            let mut g = mt.lock().map_err(|e| {
+                Event::UnexpectedError(format!("Unable to get a shared resource: {}", e))
+            })?;
+            let m: &mut T = g.deref_mut();
+            drp(m, b)
+        };
+        let mut fdel = |b: &Bucket, date: &[u8]| {
+            let mut g = mt.lock().map_err(|e| {
+                Event::UnexpectedError(format!("Unable to get a shared resource: {}", e))
+            })?;
+            let m: &mut T = g.deref_mut();
+            del(m, b, date)
+        };
+        remove_by_date_default(&mut fsel, &mut fdrp, &mut fdel, d)
+    };
+    let cnt: u64 = rbd()?;
+    let t: T = mt
+        .into_inner()
+        .map_err(|e| Event::UnexpectedError(format!("Unable to get shared resource: {}", e)))?;
+    finalize(t)?;
+    Ok(cnt)
 }

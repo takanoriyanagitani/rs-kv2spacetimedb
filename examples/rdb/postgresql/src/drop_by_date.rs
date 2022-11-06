@@ -1,10 +1,8 @@
 use std::env;
-use std::ops::DerefMut;
-use std::sync::Mutex;
 
 use rs_kv2spacetimedb::{bucket::Bucket, date::Date, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::delete::remove_by_date_default;
+use rs_kv2spacetimedb::kvstore::delete::remove_by_date_default_shared;
 
 use postgres::{Client, Config, NoTls, Row, Transaction};
 
@@ -47,27 +45,8 @@ fn pg_delete_row(t: &mut Transaction, b: &Bucket, date: &[u8]) -> Result<u64, Ev
 }
 
 fn pg_remove_by_date(tx: Transaction, d: &Date) -> Result<u64, Event> {
-    let mt: Mutex<Transaction> = Mutex::new(tx);
     let rmd = || {
-        let mut drp = |b: &Bucket| {
-            let mut mg = mt.lock().map_err(|e| {
-                Event::UnexpectedError(format!("Unable to lock transaction: {}", e))
-            })?;
-            let t: &mut Transaction = mg.deref_mut();
-            pg_drop_bucket(t, b)
-        };
-        let mut del = |b: &Bucket, date: &[u8]| {
-            let mut mg = mt.lock().map_err(|e| {
-                Event::UnexpectedError(format!("Unable to lock transaction: {}", e))
-            })?;
-            let t: &mut Transaction = mg.deref_mut();
-            pg_delete_row(t, b, date)
-        };
-        let mut sel = || {
-            let mut mg = mt.lock().map_err(|e| {
-                Event::UnexpectedError(format!("Unable to lock transaction: {}", e))
-            })?;
-            let t: &mut Transaction = mg.deref_mut();
+        let mut sel = |t: &mut Transaction| {
             let mut sel = || {
                 t.query(
                     r#"
@@ -82,14 +61,20 @@ fn pg_remove_by_date(tx: Transaction, d: &Date) -> Result<u64, Event> {
             };
             pg_get_tables(&mut sel)
         };
-        remove_by_date_default(&mut sel, &mut drp, &mut del, d)
+        let commit = |tx: Transaction| {
+            tx.commit()
+                .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))
+        };
+        remove_by_date_default_shared(
+            &mut sel,
+            &mut pg_drop_bucket,
+            &mut pg_delete_row,
+            d,
+            tx,
+            &commit,
+        )
     };
     let cnt: u64 = rmd()?;
-    let tx: Transaction = mt
-        .into_inner()
-        .map_err(|e| Event::UnexpectedError(format!("Unable to get transaction: {}", e)))?;
-    tx.commit()
-        .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))?;
     Ok(cnt)
 }
 
