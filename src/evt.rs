@@ -7,5 +7,14 @@ pub enum Event {
     /// Invalid bucket string.
     InvalidBucket(String),
 
+    /// Invalid year.
+    InvalidYear(String),
+
+    /// Invalid month.
+    InvalidMonth(String),
+
+    /// Invalid day.
+    InvalidDay(String),
+
     UnexpectedError(String),
 }

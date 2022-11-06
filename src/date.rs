@@ -1,3 +1,5 @@
+use crate::{day::Day, month::Month, year::Year};
+
 /// Date info container which contains year/month/date.
 pub struct Date {
     date: String, // 2022/11/01 => 2022_11_01
@@ -17,6 +19,24 @@ impl Date {
     /// ```
     pub fn new_unchecked(date: String) -> Self {
         Self { date }
+    }
+
+    fn from_raw(y: u16, m: u8, d: u8) -> Self {
+        let date: String = format!("{:04}_{:02}_{:02}", y, m, d);
+        Self { date }
+    }
+
+    /// Creates new `Date` which can be invalid.
+    ///
+    /// # Arguments
+    /// - y: Year. Always valid.
+    /// - m: Month. Always valid.
+    /// - d: Day. Can be invalid(does not care a month nor a leap year).
+    pub fn new(y: Year, m: Month, d: Day) -> Self {
+        let yu: u16 = y.as_raw();
+        let mu: u8 = m.as_raw();
+        let du: u8 = d.as_raw();
+        Self::from_raw(yu, mu, du)
     }
 
     /// Gets the date as str.

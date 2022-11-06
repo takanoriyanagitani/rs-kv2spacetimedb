@@ -1,8 +1,11 @@
 pub mod bucket;
 pub mod data;
 pub mod date;
+pub mod day;
 pub mod device;
 pub mod evt;
 pub mod item;
 pub mod kvstore;
+pub mod month;
 pub mod remove;
+pub mod year;
