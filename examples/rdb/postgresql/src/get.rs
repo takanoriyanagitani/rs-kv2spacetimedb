@@ -89,18 +89,21 @@ pub fn get_raw_ignore_missing_bucket() -> Result<(), Event> {
     )
     .map_err(|e| Event::UnexpectedError(format!("Unable to insert a row: {}", e)))?;
 
-    let dev: Device = Device::from(0xcafef00ddeadbeafface864299792458);
+    let dev1: Device = Device::from(0xcafef00ddeadbeafface864299792458);
+    let dev2: Device = Device::from(0xffffffffffffffffffffffffffffffff);
     let date: Date = Date::new_unchecked("2022_11_07".into());
     let k1: &[u8] = b"02:47:21.0Z";
     let k2: &[u8] = b"02:48:35.0Z";
 
     let mut getter = pg_get_raw_ignore_missing_bucket_new(c);
 
-    let o1: Option<RawItem> = getter(&dev, &date, k1)?;
-    let o2: Option<RawItem> = getter(&dev, &date, k2)?;
+    let o1: Option<RawItem> = getter(&dev1, &date, k1)?;
+    let o2: Option<RawItem> = getter(&dev1, &date, k2)?;
+    let o3: Option<RawItem> = getter(&dev2, &date, k2)?;
 
     println!("raw item 1: {:#?}", o1);
     println!("raw item 2: {:#?}", o2);
+    println!("raw item 3: {:#?}", o3);
 
     Ok(())
 }

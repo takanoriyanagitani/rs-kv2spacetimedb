@@ -1,7 +1,7 @@
 use crate::{date::Date, device::Device, evt::Event};
 
 /// ID(name) of a container which may contain many key/value pairs.
-#[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Bucket {
     name: String,
 }

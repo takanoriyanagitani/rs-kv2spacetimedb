@@ -1,3 +1,5 @@
+use crate::count::Count;
+
 /// List of request handle results.
 #[derive(Debug)]
 pub enum Event {
@@ -15,6 +17,15 @@ pub enum Event {
 
     /// Invalid day.
     InvalidDay(String),
+
+    /// Invalid Date/Time
+    InvalidDateTime(String),
+
+    /// Count cache writer error
+    UnableToUpdateCache(Count),
+
+    /// Stale count cache
+    CountCacheStale(Count),
 
     UnexpectedError(String),
 }

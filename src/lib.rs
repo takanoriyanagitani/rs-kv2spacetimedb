@@ -1,6 +1,8 @@
 pub mod bucket;
+pub mod count;
 pub mod data;
 pub mod date;
+pub mod datetime;
 pub mod day;
 pub mod device;
 pub mod evt;
