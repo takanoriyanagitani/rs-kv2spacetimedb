@@ -3,6 +3,13 @@ pub struct Device {
     id: String, // cafef00d-dead-beaf-face-864299792458 => cafef00ddeadbeafface864299792458
 }
 
+impl From<u128> for Device {
+    fn from(u: u128) -> Self {
+        let id: String = format!("{:032x}", u);
+        Self { id }
+    }
+}
+
 impl Device {
     /// Creates new `Device` from `String`.
     ///
