@@ -1,6 +1,7 @@
 use crate::{day::Day, month::Month, year::Year};
 
 /// Date info container which contains year/month/date.
+#[derive(PartialEq, PartialOrd, Eq, Ord)]
 pub struct Date {
     date: String, // 2022/11/01 => 2022_11_01
 }
