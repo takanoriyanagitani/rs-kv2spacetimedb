@@ -3,6 +3,7 @@ use rs_kv2spacetimedb::evt::Event;
 mod create_cached;
 mod create_upsert;
 mod drop_by_date;
+mod get;
 mod list_bucket;
 mod remove_stale_data;
 mod upsert;
@@ -14,6 +15,7 @@ fn sub() -> Result<(), Event> {
     create_cached::create_cached()?;
     drop_by_date::remove_by_date()?;
     remove_stale_data::remove_stale_data()?;
+    get::get_raw_ignore_missing_bucket()?;
     Ok(())
 }
 

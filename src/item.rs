@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 /// A Key/Value pair.
-#[derive(PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Item<K, V> {
     key: K,
     val: V,
