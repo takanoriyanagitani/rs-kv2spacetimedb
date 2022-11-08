@@ -1,6 +1,6 @@
 [package]
 name = "rs-kv2spacetimedb"
-version = "1.12.0"
+version = "1.13.0"
 edition = "2021"
 description = "High level DB I/F using low level key/value I/F"
 license = "Apache-2.0"

@@ -2,23 +2,37 @@ use std::env;
 
 use rs_kv2spacetimedb::{bucket::Bucket, date::Date, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::delete::remove_by_date_default_shared;
+use rs_kv2spacetimedb::kvstore::delete::delete_stale_data_default_func;
 
 use postgres::{Client, Config, NoTls, Row, Transaction};
 
-fn pg_get_tables<L>(list: &mut L) -> Result<Vec<Bucket>, Event>
-where
-    L: FnMut() -> Result<Vec<Row>, Event>,
-{
-    let rows: Vec<Row> = list()?;
-    let row2str = |r: &Row| {
-        let name: String = r.try_get(0).map_err(|e| {
-            Event::UnexpectedError(format!("Unable to get a table name from a row: {}", e))
-        })?;
-        Ok(Bucket::from(name))
-    };
-    let mapd = rows.into_iter().map(|r: Row| row2str(&r));
-    mapd.collect()
+fn pg_row2string(r: Row) -> Result<String, Event> {
+    r.try_get(0).map_err(|e| {
+        Event::UnexpectedError(format!("Unable to get a bucket name from a row: {}", e))
+    })
+}
+
+fn pg_list_buckets(t: &mut Transaction) -> Result<Vec<Bucket>, Event> {
+    let rows: Vec<Row> = t
+        .query(
+            r#"
+            SELECT table_name::TEXT
+            FROM information_schema.tables
+            WHERE table_schema='public'
+            ORDER BY table_name
+        "#,
+            &[],
+        )
+        .map_err(|e| Event::UnexpectedError(format!("Unable to get list of buckets: {}", e)))?;
+    rows.into_iter()
+        .map(pg_row2string)
+        .map(|r| r.map(Bucket::from))
+        .collect()
+}
+
+fn pg_commit(t: Transaction) -> Result<(), Event> {
+    t.commit()
+        .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))
 }
 
 fn pg_drop_bucket(t: &mut Transaction, b: &Bucket) -> Result<u64, Event> {
@@ -44,38 +58,15 @@ fn pg_delete_row(t: &mut Transaction, b: &Bucket, date: &[u8]) -> Result<u64, Ev
         .map_err(|e| Event::UnexpectedError(format!("Unable to drop a bucket: {}", e)))
 }
 
-fn pg_remove_by_date(tx: Transaction, d: &Date) -> Result<u64, Event> {
-    let rmd = || {
-        let mut sel = |t: &mut Transaction| {
-            let mut sel = || {
-                t.query(
-                    r#"
-                        SELECT table_name::TEXT
-                        FROM information_schema.tables
-                        WHERE table_schema='public'
-                        ORDER BY table_name
-                    "#,
-                    &[],
-                )
-                .map_err(|e| Event::UnexpectedError(format!("Unable to get bucket names: {}", e)))
-            };
-            pg_get_tables(&mut sel)
-        };
-        let commit = |tx: Transaction| {
-            tx.commit()
-                .map_err(|e| Event::UnexpectedError(format!("Unable to commit changes: {}", e)))
-        };
-        remove_by_date_default_shared(
-            &mut sel,
-            &mut pg_drop_bucket,
-            &mut pg_delete_row,
-            d,
-            tx,
-            &commit,
-        )
-    };
-    let cnt: u64 = rmd()?;
-    Ok(cnt)
+fn pg_delete_by_date(t: Transaction, lbi: Date) -> Result<u64, Event> {
+    delete_stale_data_default_func(
+        pg_drop_bucket,
+        pg_delete_row,
+        pg_list_buckets,
+        t,
+        pg_commit,
+        lbi,
+    )
 }
 
 pub fn remove_by_date() -> Result<(), Event> {
@@ -170,7 +161,7 @@ pub fn remove_by_date() -> Result<(), Event> {
         .transaction()
         .map_err(|e| Event::UnexpectedError(format!("Unable to start transaction: {}", e)))?;
 
-    let cnt: u64 = pg_remove_by_date(tx, &d)?;
+    let cnt: u64 = pg_delete_by_date(tx, d)?;
     println!("drop/removed: {}", cnt);
     Ok(())
 }

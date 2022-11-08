@@ -4,6 +4,126 @@ use std::sync::Mutex;
 use crate::remove::{is_delete_target, is_drop_target, is_drop_target_stale};
 use crate::{bucket::Bucket, date::Date, evt::Event};
 
+use crate::kvstore::list::ListBuckets;
+
+pub trait DropBucket {
+    fn drop(&mut self, b: &Bucket) -> Result<u64, Event>;
+}
+
+pub trait DeleteRow {
+    fn delete(&mut self, b: &Bucket, key: &[u8]) -> Result<u64, Event>;
+    fn finalize(self) -> Result<(), Event>;
+}
+
+pub fn delete_stale_data<D, T, R>(
+    mut drop_del_list: D,
+    drop_target: &T,
+    remove_target: &R,
+    lbi: Date,
+) -> Result<u64, Event>
+where
+    D: DropBucket + DeleteRow + ListBuckets,
+    T: Fn(&Bucket, &Date) -> bool,
+    R: Fn(&Bucket) -> bool,
+{
+    let vb: Vec<Bucket> = drop_del_list.list()?;
+    let drop_cnt: u64 = vb.iter().try_fold(0, |tot, b| {
+        let tgt: bool = drop_target(b, &lbi);
+        match tgt {
+            true => drop_del_list.drop(b).map(|cnt| cnt + tot),
+            false => Ok(tot),
+        }
+    })?;
+    let del_cnt: u64 = vb.iter().try_fold(0, |tot, b| {
+        let tgt: bool = remove_target(b);
+        match tgt {
+            true => drop_del_list.delete(b, lbi.as_bytes()).map(|cnt| cnt + tot),
+            false => Ok(tot),
+        }
+    })?;
+    drop_del_list.finalize()?;
+    Ok(drop_cnt + del_cnt)
+}
+
+pub fn delete_stale_data_default<D>(drop_del_list: D, lbi: Date) -> Result<u64, Event>
+where
+    D: DropBucket + DeleteRow + ListBuckets,
+{
+    delete_stale_data(drop_del_list, &is_drop_target_stale, &is_delete_target, lbi)
+}
+
+/// Drops stale bucket and deletes stale rows from buckets.
+///
+/// # Arguments
+/// - drp: Drops a bucket.
+/// - del: Deletes rows from a bucket.
+/// - lst: Gets list of buckets.
+/// - shared: Vendor specific shared resource required to drop/delete/finalize/get list.
+/// - finalize: Vendor specific finalization for the shared resource.
+/// - lbi: Date threshold(fresh data lower bound, inclusive)
+pub fn delete_stale_data_default_func<D, E, L, T, F>(
+    drp: D,
+    del: E,
+    lst: L,
+    shared: T,
+    finalize: F,
+    lbi: Date,
+) -> Result<u64, Event>
+where
+    D: FnMut(&mut T, &Bucket) -> Result<u64, Event>,
+    E: FnMut(&mut T, &Bucket, &[u8]) -> Result<u64, Event>,
+    L: FnMut(&mut T) -> Result<Vec<Bucket>, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    let dds = DelDropShared {
+        drp,
+        del,
+        lst,
+        shared,
+        finalize,
+    };
+    delete_stale_data_default(dds, lbi)
+}
+
+struct DelDropShared<D, E, L, T, F> {
+    drp: D,
+    del: E,
+    lst: L,
+    shared: T,
+    finalize: F,
+}
+
+impl<D, E, L, T, F> DropBucket for DelDropShared<D, E, L, T, F>
+where
+    D: FnMut(&mut T, &Bucket) -> Result<u64, Event>,
+{
+    fn drop(&mut self, b: &Bucket) -> Result<u64, Event> {
+        (self.drp)(&mut self.shared, b)
+    }
+}
+
+impl<D, E, L, T, F> DeleteRow for DelDropShared<D, E, L, T, F>
+where
+    E: FnMut(&mut T, &Bucket, &[u8]) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    fn delete(&mut self, b: &Bucket, key: &[u8]) -> Result<u64, Event> {
+        (self.del)(&mut self.shared, b, key)
+    }
+    fn finalize(self) -> Result<(), Event> {
+        (self.finalize)(self.shared)
+    }
+}
+
+impl<D, E, L, T, F> ListBuckets for DelDropShared<D, E, L, T, F>
+where
+    L: FnMut(&mut T) -> Result<Vec<Bucket>, Event>,
+{
+    fn list(&mut self) -> Result<Vec<Bucket>, Event> {
+        (self.lst)(&mut self.shared)
+    }
+}
+
 /// Drops stale buckets and deletes stale rows from buckets.
 ///
 /// # Arguments
