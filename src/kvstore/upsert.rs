@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ops::DerefMut;
 use std::sync::Mutex;
 
@@ -53,7 +53,7 @@ where
         shared,
         finalize,
     };
-    let mut upst = |b: &Bucket, i: &RawItem| upsert_raw.upsert(b, i);
+    let mut upst = |b: &Bucket, i: &RawItem| create_upsert(&mut upsert_raw, b, i);
     let cnt: u64 = upsert_all(requests, &mut upst)?;
     upsert_raw.finalize()?;
     Ok(cnt)
@@ -189,24 +189,56 @@ where
     })
 }
 
+pub fn create_upsert<CU>(cu: &mut CU, b: &Bucket, i: &RawItem) -> Result<u64, Event>
+where
+    CU: UpsertRaw + Create,
+{
+    let cnt_c: u64 = cu.create(b)?;
+    let cnt_u: u64 = cu.upsert(b, i)?;
+    Ok(cnt_c + cnt_u)
+}
+
+struct CreateBeforeUpsert<C, U> {
+    create: C,
+    upsert: U,
+}
+
+impl<C, U> Create for CreateBeforeUpsert<C, U>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+{
+    fn create(&mut self, b: &Bucket) -> Result<u64, Event> {
+        (self.create)(b)
+    }
+}
+
+impl<C, U> UpsertRaw for CreateBeforeUpsert<C, U>
+where
+    U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
+{
+    fn upsert(&mut self, b: &Bucket, i: &RawItem) -> Result<u64, Event> {
+        (self.upsert)(b, i)
+    }
+    fn finalize(self) -> Result<(), Event> {
+        Err(Event::UnexpectedError(String::from("Not implemented")))
+    }
+}
+
 /// Creates new upsert handler which uses closures to do create/upsert.
 ///
 /// # Arguments
 /// - create: Creates a bucket.
 /// - upsert: Handles upsert request.
 pub fn create_upsert_new<C, U>(
-    mut create: C,
-    mut upsert: U,
+    create: C,
+    upsert: U,
 ) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
 where
     C: FnMut(&Bucket) -> Result<u64, Event>,
     U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
 {
-    move |b: &Bucket, i: &RawItem| {
-        let cnt_c: u64 = create(b)?;
-        let cnt_u: u64 = upsert(b, i)?;
-        Ok(cnt_c + cnt_u)
-    }
+    let mut cu = CreateBeforeUpsert { create, upsert };
+    move |b: &Bucket, i: &RawItem| create_upsert(&mut cu, b, i)
 }
 
 /// Handles create/upsert requests which uses shared resource protected by mutex.
@@ -255,6 +287,22 @@ where
         .map_err(|e| Event::UnexpectedError(format!("Unable to prepare finalization: {}", e)))?;
     finalize(t)?;
     Ok(cnt)
+}
+
+pub fn create_skip_new_std_set(s: BTreeSet<Bucket>) -> impl Fn(&Bucket) -> Result<(), Event> {
+    move |b: &Bucket| {
+        s.get(b)
+            .map(|_| ())
+            .ok_or_else(|| Event::UnexpectedError(String::from("Should not skip")))
+    }
+}
+
+pub fn create_or_skip<C, S>(create: &mut C, skip: &S, b: &Bucket) -> Result<u64, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+    S: Fn(&Bucket) -> Result<(), Event>,
+{
+    skip(b).map(|_| 0).or_else(|_| create(b))
 }
 
 /// Creates new create handler which uses closures to create or skip bucket creation.
