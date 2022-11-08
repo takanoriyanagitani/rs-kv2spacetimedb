@@ -2,7 +2,157 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 
+use std::collections::BTreeMap;
+
 use crate::{bucket::Bucket, count::Count, evt::Event};
+
+pub trait Cache {
+    fn read(&mut self, b: &Bucket) -> Result<Count, Event>;
+    fn write(&mut self, b: &Bucket, c: &Count) -> Result<(), Event>;
+}
+
+pub trait Counter {
+    fn count(&mut self, b: &Bucket) -> Result<Count, Event>;
+}
+
+pub fn counter_new_func<C>(mut c: C) -> impl FnMut(&Bucket) -> Result<Count, Event>
+where
+    C: Counter,
+{
+    move |b: &Bucket| c.count(b)
+}
+
+struct CounterCached<F, S> {
+    fast: F,
+    slow: S,
+}
+
+struct CounterF<C> {
+    counter: C,
+}
+
+impl<C> Counter for CounterF<C>
+where
+    C: FnMut(&Bucket) -> Result<Count, Event>,
+{
+    fn count(&mut self, b: &Bucket) -> Result<Count, Event> {
+        (self.counter)(b)
+    }
+}
+
+pub fn counter_cached_new<F, S>(cache: F, slow: S) -> impl Counter
+where
+    F: Cache,
+    S: Counter,
+{
+    CounterCached { fast: cache, slow }
+}
+
+pub fn counter_new_from_func<C>(counter: C) -> impl Counter
+where
+    C: FnMut(&Bucket) -> Result<Count, Event>,
+{
+    CounterF { counter }
+}
+
+pub fn counter_cached_new_default_std<S>(slow: S) -> impl Counter
+where
+    S: Counter,
+{
+    let cache = cache_new_std_btree_map();
+    counter_cached_new(cache, slow)
+}
+
+impl<F, S> Counter for CounterCached<F, S>
+where
+    F: Cache,
+    S: Counter,
+{
+    fn count(&mut self, b: &Bucket) -> Result<Count, Event> {
+        self.fast.read(b).or_else(|_| {
+            let cnt: Count = self.slow.count(b)?;
+            self.fast.write(b, &cnt)?;
+            Ok(cnt)
+        })
+    }
+}
+
+struct CacheShared<T, R, W> {
+    shared: T,
+    read: R,
+    write: W,
+}
+
+pub fn cache_new_shared<T, R, W>(shared: T, read: R, write: W) -> impl Cache
+where
+    R: FnMut(&mut T, &Bucket) -> Result<Count, Event>,
+    W: FnMut(&mut T, &Bucket, &Count) -> Result<(), Event>,
+{
+    CacheShared {
+        shared,
+        read,
+        write,
+    }
+}
+
+pub fn cache_new_std_btree_map() -> impl Cache {
+    let shared: BTreeMap<Bucket, Count> = BTreeMap::new();
+    let read = |m: &mut BTreeMap<Bucket, Count>, b: &Bucket| {
+        m.get(b)
+            .copied()
+            .ok_or_else(|| Event::UnexpectedError(String::from("No entry")))
+    };
+    let write = move |m: &mut BTreeMap<Bucket, Count>, b: &Bucket, c: &Count| match m.get_mut(b) {
+        Some(cnt) => {
+            cnt.replace(c);
+            Ok(())
+        }
+        None => {
+            m.insert(b.clone(), *c);
+            Ok(())
+        }
+    };
+    cache_new_shared(shared, read, write)
+}
+
+impl<T, R, W> Cache for CacheShared<T, R, W>
+where
+    R: FnMut(&mut T, &Bucket) -> Result<Count, Event>,
+    W: FnMut(&mut T, &Bucket, &Count) -> Result<(), Event>,
+{
+    fn read(&mut self, b: &Bucket) -> Result<Count, Event> {
+        (self.read)(&mut self.shared, b)
+    }
+    fn write(&mut self, b: &Bucket, c: &Count) -> Result<(), Event> {
+        (self.write)(&mut self.shared, b, c)
+    }
+}
+
+struct CacheF<R, W> {
+    read: R,
+    write: W,
+}
+
+pub fn cache_new<R, W>(read: R, write: W) -> impl Cache
+where
+    R: FnMut(&Bucket) -> Result<Count, Event>,
+    W: FnMut(&Bucket, &Count) -> Result<(), Event>,
+{
+    CacheF { read, write }
+}
+
+impl<R, W> Cache for CacheF<R, W>
+where
+    R: FnMut(&Bucket) -> Result<Count, Event>,
+    W: FnMut(&Bucket, &Count) -> Result<(), Event>,
+{
+    fn read(&mut self, b: &Bucket) -> Result<Count, Event> {
+        (self.read)(b)
+    }
+    fn write(&mut self, b: &Bucket, c: &Count) -> Result<(), Event> {
+        (self.write)(b, c)
+    }
+}
 
 pub fn count_keys_cached<R, W, S>(
     cache_read: &mut R,
