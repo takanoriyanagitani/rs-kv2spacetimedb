@@ -5,6 +5,122 @@ use std::sync::Mutex;
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, data::RawData, date::Date, device::Device, evt::Event};
 
+use crate::kvstore::create::Create;
+
+pub trait UpsertRaw {
+    fn upsert(&mut self, b: &Bucket, i: &RawItem) -> Result<u64, Event>;
+    fn finalize(self) -> Result<(), Event>;
+}
+
+pub fn upsert_raw_new_func<U>(mut u: U) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
+where
+    U: UpsertRaw,
+{
+    move |b: &Bucket, i: &RawItem| u.upsert(b, i)
+}
+
+pub fn upsert_all_shared<U, C, T, F, I>(
+    upsert: U,
+    create: C,
+    shared: T,
+    finalize: F,
+    requests: I,
+) -> Result<u64, Event>
+where
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+    I: Iterator<Item = RawData>,
+{
+    let mut upsert_raw = UpsertAfterCreateShared {
+        upsert,
+        create,
+        shared,
+        finalize,
+    };
+    let mut upst = |b: &Bucket, i: &RawItem| upsert_raw.upsert(b, i);
+    let cnt: u64 = upsert_all(requests, &mut upst)?;
+    upsert_raw.finalize()?;
+    Ok(cnt)
+}
+
+pub fn upsert_raw_new_func_shared<U, C, T, F>(
+    upsert: U,
+    create: C,
+    shared: T,
+    finalize: F,
+) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
+where
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    let upsert_create = UpsertAfterCreateShared {
+        upsert,
+        create,
+        shared,
+        finalize,
+    };
+    let upsert_after_create = upsert_after_create_new(upsert_create);
+    upsert_raw_new_func(upsert_after_create)
+}
+
+pub fn upsert_after_create_new<UC>(upsert_create: UC) -> impl UpsertRaw
+where
+    UC: UpsertRaw + Create,
+{
+    UpsertAfterCreate { upsert_create }
+}
+
+struct UpsertAfterCreate<UC> {
+    upsert_create: UC,
+}
+
+impl<UC> UpsertRaw for UpsertAfterCreate<UC>
+where
+    UC: UpsertRaw + Create,
+{
+    fn upsert(&mut self, b: &Bucket, i: &RawItem) -> Result<u64, Event> {
+        let cnt_c: u64 = self.upsert_create.create(b)?;
+        let cnt_u: u64 = self.upsert_create.upsert(b, i)?;
+        Ok(cnt_c + cnt_u)
+    }
+
+    fn finalize(self) -> Result<(), Event> {
+        self.upsert_create.finalize()
+    }
+}
+
+struct UpsertAfterCreateShared<U, C, T, F> {
+    upsert: U,
+    create: C,
+    shared: T,
+    finalize: F,
+}
+
+impl<U, C, T, F> UpsertRaw for UpsertAfterCreateShared<U, C, T, F>
+where
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    fn upsert(&mut self, b: &Bucket, i: &RawItem) -> Result<u64, Event> {
+        (self.upsert)(&mut self.shared, b, i)
+    }
+
+    fn finalize(self) -> Result<(), Event> {
+        (self.finalize)(self.shared)
+    }
+}
+
+impl<U, C, T, F> Create for UpsertAfterCreateShared<U, C, T, F>
+where
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+{
+    fn create(&mut self, b: &Bucket) -> Result<u64, Event> {
+        (self.create)(&mut self.shared, b)
+    }
+}
+
 struct UpsertRequest<K, V> {
     bucket: Bucket,
     item: Item<K, V>,
