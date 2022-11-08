@@ -3,7 +3,7 @@ use std::env;
 use rs_kv2spacetimedb::item::RawItem;
 use rs_kv2spacetimedb::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
-use rs_kv2spacetimedb::kvstore::get::get_raw_ignore_missing_bucket_shared_new;
+use rs_kv2spacetimedb::kvstore::get::get_raw_ignore_missing_bucket_new_func_shared;
 
 use postgres::{Client, Config, NoTls, Row};
 
@@ -40,15 +40,18 @@ fn pg_bucket_exists(c: &mut Client, b: &Bucket) -> Result<bool, Event> {
         .map(|o: Option<_>| o.map(|_: Row| true).unwrap_or(false))
 }
 
-fn pg_get_raw_ignore_missing_bucket_new(
+fn pg_get_raw_ignore_missing_bucket_new_func_shared(
     c: Client,
 ) -> impl FnMut(&Device, &Date, &[u8]) -> Result<Option<RawItem>, Event> {
-    let sel = |c: &mut Client, b: &Bucket, key: &[u8]| match pg_select(c, b, key) {
-        Ok(Some(row)) => row2bytes(&row).map(Some),
-        Ok(None) => Ok(None),
-        Err(e) => Err(e),
+    let sel = |c: &mut Client, b: &Bucket, key: &[u8]| {
+        let row: Option<Row> = pg_select(c, b, key)?;
+        match row {
+            Some(r) => row2bytes(&r).map(Some),
+            None => Ok(None),
+        }
     };
-    get_raw_ignore_missing_bucket_shared_new(sel, pg_bucket_exists, c)
+
+    get_raw_ignore_missing_bucket_new_func_shared(sel, pg_bucket_exists, c)
 }
 
 pub fn get_raw_ignore_missing_bucket() -> Result<(), Event> {
@@ -95,7 +98,7 @@ pub fn get_raw_ignore_missing_bucket() -> Result<(), Event> {
     let k1: &[u8] = b"02:47:21.0Z";
     let k2: &[u8] = b"02:48:35.0Z";
 
-    let mut getter = pg_get_raw_ignore_missing_bucket_new(c);
+    let mut getter = pg_get_raw_ignore_missing_bucket_new_func_shared(c);
 
     let o1: Option<RawItem> = getter(&dev1, &date, k1)?;
     let o2: Option<RawItem> = getter(&dev1, &date, k2)?;

@@ -4,6 +4,83 @@ use std::sync::Mutex;
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
+pub trait GetRaw {
+    fn get(&mut self, b: &Bucket, key: &[u8]) -> Result<Option<Vec<u8>>, Event>;
+    fn chk(&mut self, b: &Bucket) -> Result<bool, Event>;
+}
+
+struct GetRawShared<G, C, R> {
+    get: G,
+    chk: C,
+    shared: R,
+}
+
+pub fn get_raw_new<G>(
+    mut getter: G,
+) -> impl FnMut(&Device, &Date, &[u8]) -> Result<Option<RawItem>, Event>
+where
+    G: FnMut(&Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>,
+{
+    move |dev: &Device, d: &Date, key: &[u8]| {
+        let b: Bucket = Bucket::new_data_bucket(dev, d);
+        get_raw_direct(&mut getter, &b, key)
+    }
+}
+
+pub fn get_raw_ignore_missing_bucket_new_func_shared_direct<G, C, R>(
+    get: G,
+    chk: C,
+    shared: R,
+) -> impl FnMut(&Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>
+where
+    G: Fn(&mut R, &Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>,
+    C: Fn(&mut R, &Bucket) -> Result<bool, Event>,
+{
+    let grs = GetRawShared { get, chk, shared };
+    get_raw_ignore_missing_bucket_new_func(grs)
+}
+
+pub fn get_raw_ignore_missing_bucket_new_func_shared<G, C, R>(
+    get: G,
+    chk: C,
+    shared: R,
+) -> impl FnMut(&Device, &Date, &[u8]) -> Result<Option<RawItem>, Event>
+where
+    G: Fn(&mut R, &Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>,
+    C: Fn(&mut R, &Bucket) -> Result<bool, Event>,
+{
+    let getter = get_raw_ignore_missing_bucket_new_func_shared_direct(get, chk, shared);
+    get_raw_new(getter)
+}
+
+impl<G, C, R> GetRaw for GetRawShared<G, C, R>
+where
+    G: Fn(&mut R, &Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>,
+    C: Fn(&mut R, &Bucket) -> Result<bool, Event>,
+{
+    fn get(&mut self, b: &Bucket, key: &[u8]) -> Result<Option<Vec<u8>>, Event> {
+        (self.get)(&mut self.shared, b, key)
+    }
+
+    fn chk(&mut self, b: &Bucket) -> Result<bool, Event> {
+        (self.chk)(&mut self.shared, b)
+    }
+}
+
+pub fn get_raw_ignore_missing_bucket_new_func<G>(
+    mut getter: G,
+) -> impl FnMut(&Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>
+where
+    G: GetRaw,
+{
+    move |b: &Bucket, key: &[u8]| {
+        let bucket_exists: bool = getter.chk(b)?;
+        bucket_exists
+            .then(|| getter.get(b, key))
+            .unwrap_or(Ok(None))
+    }
+}
+
 /// Tries to get a raw item from specified bucket.
 ///
 /// # Arguments
