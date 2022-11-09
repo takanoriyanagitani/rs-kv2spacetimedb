@@ -17,6 +17,33 @@ where
     getter(&b)
 }
 
+/// Creates new devices getter which gets all rows in a device master bucket.
+///
+/// Missing bucket will be ignored(returns empty vec).
+///
+/// # Arguments
+/// - getter: Gets all rows from a bucket.
+/// - checker: Checks if the bucket exists.
+/// - shared: Vendor specific shared resource used by getter/checker.
+pub fn get_devices4date_ignore_missing_bucket_new<G, C, R>(
+    getter: G,
+    checker: C,
+    mut shared: R,
+) -> impl FnMut(&Date) -> Result<Vec<RawItem>, Event>
+where
+    G: Fn(&mut R, &Bucket) -> Result<Vec<RawItem>, Event>,
+    C: Fn(&mut R, &Bucket) -> Result<bool, Event>,
+{
+    move |d: &Date| {
+        let b: Bucket = Bucket::new_devices_master_for_date(d);
+        let bucket_exists: bool = checker(&mut shared, &b)?;
+        match bucket_exists {
+            false => Ok(vec![]),
+            true => getter(&mut shared, &b),
+        }
+    }
+}
+
 /// Tries to get a value from a bucket which ignores missing bucket.
 pub trait GetRaw {
     /// Gets a value.
