@@ -7,6 +7,7 @@ mod create_upsert;
 mod drop_by_date;
 mod get;
 mod get_devices4date;
+mod list;
 mod list_bucket;
 mod remove_device;
 mod remove_stale_data;
@@ -24,6 +25,7 @@ fn sub() -> Result<(), Event> {
     remove_device::remove_device()?;
     count_data::count_data()?;
     get_devices4date::get_devices4date()?;
+    list::list()?;
     Ok(())
 }
 
