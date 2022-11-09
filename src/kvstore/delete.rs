@@ -1,20 +1,93 @@
 use std::ops::DerefMut;
 use std::sync::Mutex;
 
-use crate::remove::{is_delete_target, is_drop_target, is_drop_target_stale};
-use crate::{bucket::Bucket, date::Date, evt::Event};
+use crate::remove::{
+    is_delete_target, is_delete_target_device, is_drop_target, is_drop_target_device,
+    is_drop_target_stale,
+};
+use crate::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
 use crate::kvstore::list::ListBuckets;
 
+/// Drops the bucket.
 pub trait DropBucket {
     fn drop(&mut self, b: &Bucket) -> Result<u64, Event>;
 }
 
+/// Deletes a row from the bucket.
 pub trait DeleteRow {
+    /// Deletes a row from the bucket.
     fn delete(&mut self, b: &Bucket, key: &[u8]) -> Result<u64, Event>;
+
+    /// Finalizes changes.
     fn finalize(self) -> Result<(), Event>;
 }
 
+/// Removes a device.
+///
+/// # Arguments
+/// - drop_del_list: Gets list of buckets, Drops a bucket, Deletes a row.
+/// - drop_target: Checks if the bucket is drop target.
+/// - remove_target: Checks if the bucket can have delete target row.
+/// - target: The device to be removed.
+pub fn delete_device<D, T, R>(
+    mut drop_del_list: D,
+    drop_target: &T,
+    remove_target: &R,
+    target: Device,
+) -> Result<u64, Event>
+where
+    D: DropBucket + DeleteRow + ListBuckets,
+    T: Fn(&Bucket, &Device) -> bool,
+    R: Fn(&Bucket) -> bool,
+{
+    let vb: Vec<Bucket> = drop_del_list.list()?;
+    let drop_cnt: u64 = vb.iter().try_fold(0, |tot, b| {
+        let tgt: bool = drop_target(b, &target);
+        match tgt {
+            true => drop_del_list.drop(b).map(|cnt| cnt + tot),
+            false => Ok(tot),
+        }
+    })?;
+    let del_cnt: u64 = vb.iter().try_fold(0, |tot, b| {
+        let tgt: bool = remove_target(b);
+        match tgt {
+            true => drop_del_list
+                .delete(b, target.as_bytes())
+                .map(|cnt| cnt + tot),
+            false => Ok(tot),
+        }
+    })?;
+    drop_del_list.finalize()?;
+    Ok(drop_cnt + del_cnt)
+}
+
+/// Removes a device which uses default checkers.
+///
+/// # Arguments
+/// - drop_del_list: Gets list of buckets, Drops a bucket, Deletes a row.
+/// - drop_target: Checks if the bucket is drop target.
+/// - remove_target: Checks if the bucket can have delete target row.
+/// - target: The device to be removed.
+pub fn delete_device_default<D>(drop_del_list: D, target: Device) -> Result<u64, Event>
+where
+    D: DropBucket + DeleteRow + ListBuckets,
+{
+    delete_device(
+        drop_del_list,
+        &is_drop_target_device,
+        &is_delete_target_device,
+        target,
+    )
+}
+
+/// Drops stale buckets and deletes stale rows from buckets.
+///
+/// # Arguments
+/// - drop_del_list: Gets list of buckets, Drops a bucket, Deletes a row.
+/// - drop_target: Checks if the bucket is stale.
+/// - remove_target: Checks if the bucket can have stale rows.
+/// - lbi: Date threshold(fresh date lower bound, inclusive).
 pub fn delete_stale_data<D, T, R>(
     mut drop_del_list: D,
     drop_target: &T,
@@ -45,11 +118,49 @@ where
     Ok(drop_cnt + del_cnt)
 }
 
+/// Drops stale buckets and deletes stale rows which uses default checkers.
+///
+/// # Arguments
+/// - drop_del_list: Gets list of buckets, Drops a bucket, Deletes a row.
+/// - lbi: Date threshold(fresh date lower bound, inclusive).
 pub fn delete_stale_data_default<D>(drop_del_list: D, lbi: Date) -> Result<u64, Event>
 where
     D: DropBucket + DeleteRow + ListBuckets,
 {
     delete_stale_data(drop_del_list, &is_drop_target_stale, &is_delete_target, lbi)
+}
+
+/// Drops buckets and deletes rows which contains the device info.
+///
+/// # Arguments
+/// - drp: Drops a bucket.
+/// - del: Deletes rows from a bucket.
+/// - lst: Gets list of buckets.
+/// - shared: Vendor specific shared resource required to drop/delete/finalize/get list.
+/// - finalize: Vendor specific finalization for the shared resource.
+/// - target: The device to be removed.
+pub fn delete_device_default_func<D, E, L, T, F>(
+    drp: D,
+    del: E,
+    lst: L,
+    shared: T,
+    finalize: F,
+    target: Device,
+) -> Result<u64, Event>
+where
+    D: FnMut(&mut T, &Bucket) -> Result<u64, Event>,
+    E: FnMut(&mut T, &Bucket, &[u8]) -> Result<u64, Event>,
+    L: FnMut(&mut T) -> Result<Vec<Bucket>, Event>,
+    F: Fn(T) -> Result<(), Event>,
+{
+    let dds = DelDropShared {
+        drp,
+        del,
+        lst,
+        shared,
+        finalize,
+    };
+    delete_device_default(dds, target)
 }
 
 /// Drops stale bucket and deletes stale rows from buckets.

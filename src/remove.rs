@@ -1,8 +1,33 @@
-use crate::{bucket::Bucket, date::Date, day::Day, evt::Event, month::Month, year::Year};
+use crate::{
+    bucket::Bucket, date::Date, day::Day, device::Device, evt::Event, month::Month, year::Year,
+};
 
 fn is_drop_target_str(bs: &str, ds: &str) -> Result<bool, Event> {
     let pat = format!("data_{}", ds);
     Ok(bs.starts_with(&pat))
+}
+
+fn is_drop_target_device_str(bs: &str, ds: &str) -> Result<bool, Event> {
+    let head = "data_";
+    let tail = format!("_{}", ds);
+    Ok(bs.starts_with(head) && bs.ends_with(&tail))
+}
+
+/// Checks if the bucket must be dropped.
+///
+/// The device info in the bucket will be compared and the bucket will be dropped on match.
+///
+/// # Arguments
+/// - b: The bucket to be checked.
+/// - d: The device to be compared.
+pub fn is_drop_target_device(b: &Bucket, d: &Device) -> bool {
+    let bs: &str = b.as_str();
+    let ds: &str = d.as_str();
+
+    format!("dates_{}", ds)
+        .eq(bs)
+        .then_some(true)
+        .unwrap_or_else(|| is_drop_target_device_str(bs, ds).unwrap_or(false))
 }
 
 /// Checks if the bucket must be dropped.
@@ -24,6 +49,20 @@ pub fn is_drop_target(b: &Bucket, d: &Date) -> bool {
 
 fn is_delete_target_str(bs: &str) -> Result<bool, Event> {
     Ok(bs.starts_with("dates_"))
+}
+
+fn is_delete_target_device_str(bs: &str) -> Result<bool, Event> {
+    Ok(bs.starts_with("devices_"))
+}
+
+/// Checks if the bucket can have rows to be deleted.
+pub fn is_delete_target_device(b: &Bucket) -> bool {
+    let bs: &str = b.as_str();
+
+    "devices"
+        .eq(bs)
+        .then_some(true)
+        .unwrap_or_else(|| is_delete_target_device_str(bs).unwrap_or(false))
 }
 
 /// Checks if the bucket can have rows to be deleted.

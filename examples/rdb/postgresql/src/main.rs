@@ -6,6 +6,7 @@ mod create_upsert;
 mod drop_by_date;
 mod get;
 mod list_bucket;
+mod remove_device;
 mod remove_stale_data;
 mod upsert;
 
@@ -18,6 +19,7 @@ fn sub() -> Result<(), Event> {
     remove_stale_data::remove_stale_data()?;
     get::get_raw_ignore_missing_bucket()?;
     count::count()?;
+    remove_device::remove_device()?;
     Ok(())
 }
 
