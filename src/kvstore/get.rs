@@ -4,8 +4,12 @@ use std::sync::Mutex;
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
+/// Tries to get a value from a bucket which ignores missing bucket.
 pub trait GetRaw {
+    /// Gets a value.
     fn get(&mut self, b: &Bucket, key: &[u8]) -> Result<Option<Vec<u8>>, Event>;
+
+    /// Checks if the bucket exists.
     fn chk(&mut self, b: &Bucket) -> Result<bool, Event>;
 }
 
@@ -15,6 +19,7 @@ struct GetRawShared<G, C, R> {
     shared: R,
 }
 
+/// Creates new data getter which uses a closure to try to get a value from the bucket.
 pub fn get_raw_new<G>(
     mut getter: G,
 ) -> impl FnMut(&Device, &Date, &[u8]) -> Result<Option<RawItem>, Event>
@@ -27,6 +32,12 @@ where
     }
 }
 
+/// Creates new getter which ignores missing bucket.
+///
+/// # Arguments
+/// - get: Tries to get a value from the bucket using shared resource.
+/// - chk: Checks if the bucket exists.
+/// - shared: Vendor specific shared resource for get/chk.
 pub fn get_raw_ignore_missing_bucket_new_func_shared_direct<G, C, R>(
     get: G,
     chk: C,
@@ -40,6 +51,12 @@ where
     get_raw_ignore_missing_bucket_new_func(grs)
 }
 
+/// Creates new data getter which uses closures to try to get a value from the bucket.
+///
+/// # Arguments
+/// - get: Tries to get a value from the bucket using shared resource.
+/// - chk: Checks if the bucket exists.
+/// - shared: Vendor specific shared resource for get/chk.
 pub fn get_raw_ignore_missing_bucket_new_func_shared<G, C, R>(
     get: G,
     chk: C,
@@ -67,6 +84,7 @@ where
     }
 }
 
+/// Creates new getter function using getter implementation.
 pub fn get_raw_ignore_missing_bucket_new_func<G>(
     mut getter: G,
 ) -> impl FnMut(&Bucket, &[u8]) -> Result<Option<Vec<u8>>, Event>
