@@ -34,6 +34,42 @@ where
 /// - shared: Vendor specific shared resource for upsert/create.
 /// - finalize: Finalizes the shared resource.
 /// - requests: Data to be upserted.
+/// - upsert_value_gen: Value generator for master buckets.
+pub fn upsert_all_shared_ex<U, C, T, F, I, G>(
+    upsert: U,
+    create: C,
+    shared: T,
+    finalize: F,
+    requests: I,
+    upsert_value_gen: G,
+) -> Result<u64, Event>
+where
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+    F: Fn(T) -> Result<(), Event>,
+    I: Iterator<Item = RawData>,
+    G: UpsertValueGenerator,
+{
+    let mut upsert_raw = UpsertAfterCreateShared {
+        upsert,
+        create,
+        shared,
+        finalize,
+    };
+    let mut upst = |b: &Bucket, i: &RawItem| create_upsert(&mut upsert_raw, b, i);
+    let cnt: u64 = upsert_all_ex(requests, &mut upst, upsert_value_gen)?;
+    upsert_raw.finalize()?;
+    Ok(cnt)
+}
+
+/// Upserts data which creates a bucket before upsert.
+///
+/// # Arguments
+/// - upsert: Upserts an item into a bucket using shared resource.
+/// - create: Creates a bucket using shared resource.
+/// - shared: Vendor specific shared resource for upsert/create.
+/// - finalize: Finalizes the shared resource.
+/// - requests: Data to be upserted.
 pub fn upsert_all_shared<U, C, T, F, I>(
     upsert: U,
     create: C,
@@ -47,16 +83,8 @@ where
     F: Fn(T) -> Result<(), Event>,
     I: Iterator<Item = RawData>,
 {
-    let mut upsert_raw = UpsertAfterCreateShared {
-        upsert,
-        create,
-        shared,
-        finalize,
-    };
-    let mut upst = |b: &Bucket, i: &RawItem| create_upsert(&mut upsert_raw, b, i);
-    let cnt: u64 = upsert_all(requests, &mut upst)?;
-    upsert_raw.finalize()?;
-    Ok(cnt)
+    let upsert_value_gen = upsert_value_generator_new_func_default();
+    upsert_all_shared_ex(upsert, create, shared, finalize, requests, upsert_value_gen)
 }
 
 struct UpsertAfterCreateShared<U, C, T, F> {
@@ -100,15 +128,100 @@ impl<K, V> UpsertRequest<K, V> {
     }
 }
 
+/// Generates value for master buckets.
+pub trait UpsertValueGenerator {
+    /// Generates value for device master bucket.
+    fn devices(&self, d: &Device) -> RawItem;
+
+    /// Generates value for date master bucket.
+    fn dates(&self, d: &Date) -> RawItem;
+
+    /// Generates value for date master bucket for device.
+    fn dates4device(&self, d: &Date) -> RawItem;
+
+    /// Generates value for device master bucket for date.
+    fn devices4date(&self, d: &Device) -> RawItem;
+}
+
+/// Creates new value generator using closures.
+///
+/// # Arguments
+/// - dates: Value generator for dates bucket.
+/// - devices: Value generator for devices bucket.
+/// - dates4device: Value generator for date master bucket for device.
+/// - devices4date: Value generator for device master bucket for date.
+pub fn upsert_value_generator_new_func<Dates, Devices, Dates4, Devices4>(
+    dates: Dates,
+    devices: Devices,
+    dates4device: Dates4,
+    devices4date: Devices4,
+) -> impl UpsertValueGenerator
+where
+    Dates: Fn(&Date) -> RawItem,
+    Devices: Fn(&Device) -> RawItem,
+    Dates4: Fn(&Date) -> RawItem,
+    Devices4: Fn(&Device) -> RawItem,
+{
+    UpsertValueGenF {
+        dates,
+        devices,
+        dates4device,
+        devices4date,
+    }
+}
+
+/// Creates default value generator which uses empty bytes as value.
+pub fn upsert_value_generator_new_func_default() -> impl UpsertValueGenerator {
+    upsert_value_generator_new_func(
+        |d: &Date| Item::new(d.as_bytes().to_vec(), vec![]),
+        |d: &Device| Item::new(d.as_bytes().to_vec(), vec![]),
+        |d: &Date| Item::new(d.as_bytes().to_vec(), vec![]),
+        |d: &Device| Item::new(d.as_bytes().to_vec(), vec![]),
+    )
+}
+
+struct UpsertValueGenF<Dates, Devices, Dates4, Devices4> {
+    dates: Dates,
+    devices: Devices,
+    dates4device: Dates4,
+    devices4date: Devices4,
+}
+
+impl<Dates, Devices, Dates4, Devices4> UpsertValueGenerator
+    for UpsertValueGenF<Dates, Devices, Dates4, Devices4>
+where
+    Devices: Fn(&Device) -> RawItem,
+    Dates: Fn(&Date) -> RawItem,
+    Dates4: Fn(&Date) -> RawItem,
+    Devices4: Fn(&Device) -> RawItem,
+{
+    fn devices(&self, d: &Device) -> RawItem {
+        (self.devices)(d)
+    }
+    fn dates(&self, d: &Date) -> RawItem {
+        (self.dates)(d)
+    }
+
+    fn dates4device(&self, d: &Date) -> RawItem {
+        (self.dates4device)(d)
+    }
+    fn devices4date(&self, d: &Device) -> RawItem {
+        (self.devices4date)(d)
+    }
+}
+
 impl UpsertRequest<Vec<u8>, Vec<u8>> {
-    fn from_data(d: RawData) -> Vec<Self> {
+    fn from_data<G>(d: RawData, upsert_value_gen: &G) -> Vec<Self>
+    where
+        G: UpsertValueGenerator,
+    {
         let dev: &Device = d.as_device();
         let date: &Date = d.as_date();
 
-        let i_dates4device: RawItem = Item::new(date.as_bytes().to_vec(), vec![]);
-        let i_devices4date: RawItem = Item::new(dev.as_bytes().to_vec(), vec![]);
-        let i_dates: RawItem = Item::new(date.as_bytes().to_vec(), vec![]);
-        let i_devices: RawItem = Item::new(dev.as_bytes().to_vec(), vec![]);
+        let i_dates4device: RawItem = upsert_value_gen.dates4device(date);
+        let i_devices4date: RawItem = upsert_value_gen.devices4date(dev);
+        let i_dates: RawItem = upsert_value_gen.dates(date);
+        let i_devices: RawItem = upsert_value_gen.devices(dev);
 
         let b_data: Bucket = Bucket::new_data_bucket(dev, date);
         let b_dates4device: Bucket = Bucket::new_dates_master_for_device(dev);
@@ -121,19 +234,22 @@ impl UpsertRequest<Vec<u8>, Vec<u8>> {
         let i_data: RawItem = item;
 
         vec![
-            Self::new(b_data, i_data),
-            Self::new(b_dates4device, i_dates4device),
-            Self::new(b_devices4date, i_devices4date),
-            Self::new(b_dates, i_dates),
-            Self::new(b_devices, i_devices),
+            Self::new(b_data, i_data),                 // data_2022_11_09_cafef00d....
+            Self::new(b_dates4device, i_dates4device), // dates_cafef00d....
+            Self::new(b_devices4date, i_devices4date), // devices_2022_11_09
+            Self::new(b_dates, i_dates),               // dates
+            Self::new(b_devices, i_devices),           // devices
         ]
     }
 
-    fn bulkdata2map<I>(bulk: I) -> BTreeMap<Bucket, Vec<RawItem>>
+    fn bulkdata2map<I, G>(bulk: I, upsert_value_gen: G) -> BTreeMap<Bucket, Vec<RawItem>>
     where
         I: Iterator<Item = RawData>,
+        G: UpsertValueGenerator,
     {
-        let i = bulk.map(Self::from_data).flat_map(|v| v.into_iter());
+        let i = bulk
+            .map(|d: RawData| Self::from_data(d, &upsert_value_gen))
+            .flat_map(|v| v.into_iter());
         i.fold(BTreeMap::new(), |mut m, req| {
             let b: Bucket = req.bucket;
             let i: RawItem = req.item;
@@ -152,11 +268,12 @@ impl UpsertRequest<Vec<u8>, Vec<u8>> {
     }
 }
 
-fn rawdata2requests<I>(i: I) -> impl Iterator<Item = (Bucket, Vec<RawItem>)>
+fn rawdata2requests<I, G>(i: I, upsert_value_gen: G) -> impl Iterator<Item = (Bucket, Vec<RawItem>)>
 where
     I: Iterator<Item = RawData>,
+    G: UpsertValueGenerator,
 {
-    let m: BTreeMap<Bucket, Vec<RawItem>> = UpsertRequest::bulkdata2map(i);
+    let m: BTreeMap<Bucket, Vec<RawItem>> = UpsertRequest::bulkdata2map(i, upsert_value_gen);
     m.into_iter()
 }
 
@@ -176,12 +293,14 @@ where
 /// # Arguments
 /// - source: `RawData` source iterator.
 /// - upsert: Data saver which saves data into specified bucket.
-pub fn upsert_all<I, U>(source: I, upsert: &mut U) -> Result<u64, Event>
+/// - upsert_value_gen: Value generator for master buckets.
+pub fn upsert_all_ex<I, U, G>(source: I, upsert: &mut U, upsert_value_gen: G) -> Result<u64, Event>
 where
     I: Iterator<Item = RawData>,
     U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
+    G: UpsertValueGenerator,
 {
-    let mut requests = rawdata2requests(source);
+    let mut requests = rawdata2requests(source, upsert_value_gen);
     requests.try_fold(0, |tot, req| {
         let (bucket, v) = req;
         let uniq: Vec<RawItem> = Item::uniq(v);
@@ -189,6 +308,23 @@ where
     })
 }
 
+/// Saves data got from source which uses a closure to actually save data.
+///
+/// Duplicates will be ignored.
+///
+/// # Arguments
+/// - source: `RawData` source iterator.
+/// - upsert: Data saver which saves data into specified bucket.
+pub fn upsert_all<I, U>(source: I, upsert: &mut U) -> Result<u64, Event>
+where
+    I: Iterator<Item = RawData>,
+    U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
+{
+    let upsert_value_gen = upsert_value_generator_new_func_default();
+    upsert_all_ex(source, upsert, upsert_value_gen)
+}
+
+/// Creates a bucket before upsert.
 pub fn create_upsert<CU>(cu: &mut CU, b: &Bucket, i: &RawItem) -> Result<u64, Event>
 where
     CU: UpsertRaw + Create,
@@ -289,6 +425,7 @@ where
     Ok(cnt)
 }
 
+/// Creates new bucket checker using set.
 pub fn create_skip_new_std_set(s: BTreeSet<Bucket>) -> impl Fn(&Bucket) -> Result<(), Event> {
     move |b: &Bucket| {
         s.get(b)
@@ -297,6 +434,12 @@ pub fn create_skip_new_std_set(s: BTreeSet<Bucket>) -> impl Fn(&Bucket) -> Resul
     }
 }
 
+/// Creates a bucket if not exists.
+///
+/// # Arguments
+/// - create: Creates a bucket.
+/// - skip:   Checks if a bucket exists(must return Err on bucket missing).
+/// - b:      Bucket to be created.
 pub fn create_or_skip<C, S>(create: &mut C, skip: &S, b: &Bucket) -> Result<u64, Event>
 where
     C: FnMut(&Bucket) -> Result<u64, Event>,

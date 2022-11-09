@@ -1,4 +1,5 @@
 pub mod bucket;
+pub mod compose;
 pub mod count;
 pub mod data;
 pub mod date;
