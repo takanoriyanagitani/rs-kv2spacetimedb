@@ -4,7 +4,61 @@ use std::path::Path;
 
 use std::collections::BTreeMap;
 
-use crate::{bucket::Bucket, count::Count, evt::Event};
+use crate::{
+    bucket::Bucket, count::Count, date::Date, datetime::DateTime, device::Device, evt::Event,
+};
+
+/// Counts number of rows in a data bucket.
+///
+/// # Arguments
+/// - counter: Counts number of rows in a bucket.
+/// - dev: Target device.
+/// - date: Target date.
+/// - time_source: Gets current date/time.
+pub fn count_data_bucket4date<C, T>(
+    counter: &mut C,
+    dev: &Device,
+    date: &Date,
+    time_source: &T,
+) -> Result<Count, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+    T: Fn() -> Result<DateTime, Event>,
+{
+    let b: Bucket = Bucket::new_data_bucket(dev, date);
+    let cnt: u64 = counter(&b)?;
+    let dt: DateTime = time_source()?;
+    Ok(Count::new(cnt, dt))
+}
+
+/// Creates new counter which counts number of rows of a data bucket.
+///
+/// # Arguments
+/// - counter: Counts number of rows in a bucket.
+/// - time_source: Gets current date/time.
+pub fn count_data_bucket4date_new<C, T>(
+    mut counter: C,
+    time_source: T,
+) -> impl FnMut(&Device, &Date) -> Result<Count, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+    T: Fn() -> Result<DateTime, Event>,
+{
+    move |dev: &Device, d: &Date| count_data_bucket4date(&mut counter, dev, d, &time_source)
+}
+
+/// Creates new counter which uses default time source.
+///
+/// # Arguments
+/// - counter: Counts number of rows in a bucket.
+pub fn count_data_bucket4date_new_default_std<C>(
+    counter: C,
+) -> impl FnMut(&Device, &Date) -> Result<Count, Event>
+where
+    C: FnMut(&Bucket) -> Result<u64, Event>,
+{
+    count_data_bucket4date_new(counter, DateTime::time_source_new_std())
+}
 
 pub trait Cache {
     fn read(&mut self, b: &Bucket) -> Result<Count, Event>;

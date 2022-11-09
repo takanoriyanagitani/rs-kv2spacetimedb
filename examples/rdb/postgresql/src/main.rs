@@ -1,6 +1,7 @@
 use rs_kv2spacetimedb::evt::Event;
 
 mod count;
+mod count_data;
 mod create_cached;
 mod create_upsert;
 mod drop_by_date;
@@ -20,6 +21,7 @@ fn sub() -> Result<(), Event> {
     get::get_raw_ignore_missing_bucket()?;
     count::count()?;
     remove_device::remove_device()?;
+    count_data::count_data()?;
     Ok(())
 }
 

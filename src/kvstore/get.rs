@@ -4,6 +4,19 @@ use std::sync::Mutex;
 use crate::item::{Item, RawItem};
 use crate::{bucket::Bucket, date::Date, device::Device, evt::Event};
 
+/// Gets all device info from device master bucket.
+///
+/// # Arguments
+/// - getter: Gets all rows from a bucket.
+/// - d: Target date.
+pub fn get_devices4date<G>(getter: &mut G, d: &Date) -> Result<Vec<RawItem>, Event>
+where
+    G: FnMut(&Bucket) -> Result<Vec<RawItem>, Event>,
+{
+    let b: Bucket = Bucket::new_devices_master_for_date(d);
+    getter(&b)
+}
+
 /// Tries to get a value from a bucket which ignores missing bucket.
 pub trait GetRaw {
     /// Gets a value.
