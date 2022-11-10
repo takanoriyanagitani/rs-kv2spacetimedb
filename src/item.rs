@@ -40,3 +40,37 @@ where
         &self.val
     }
 }
+
+#[cfg(test)]
+mod test_item {
+
+    mod uniq {
+        use crate::item::Item;
+
+        #[test]
+        fn test_empty() {
+            let items: Vec<Item<u8, u8>> = vec![];
+            let unq = Item::uniq(items);
+            assert_eq!(unq, vec![]);
+        }
+
+        #[test]
+        fn test_integers() {
+            let items: Vec<Item<u8, u8>> = vec![
+                Item::new(0x42, 0x42),
+                Item::new(0x42, 0x43),
+                Item::new(0x42, 0x43),
+                Item::new(0x43, 0x43),
+            ];
+            let unq = Item::uniq(items);
+            assert_eq!(
+                unq,
+                vec![
+                    Item::new(0x42, 0x42),
+                    Item::new(0x42, 0x43),
+                    Item::new(0x43, 0x43),
+                ]
+            );
+        }
+    }
+}
