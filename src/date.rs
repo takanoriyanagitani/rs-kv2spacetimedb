@@ -50,3 +50,22 @@ impl Date {
         self.as_str().as_bytes()
     }
 }
+
+#[cfg(test)]
+mod test_date {
+
+    mod new_date {
+
+        use crate::date::Date;
+        use crate::{day::Day, month::Month, year::Year};
+
+        #[test]
+        fn test_epoch() {
+            let y: Year = Year::try_from(1970).unwrap();
+            let m: Month = Month::Jan;
+            let d: Day = Day::try_from(1).unwrap();
+            let date: Date = Date::new(y, m, d);
+            assert_eq!("1970_01_01", date.as_str());
+        }
+    }
+}
