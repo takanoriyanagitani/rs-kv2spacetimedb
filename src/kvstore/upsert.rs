@@ -18,12 +18,51 @@ pub trait UpsertRaw {
     fn finalize(self) -> Result<(), Event>;
 }
 
+/// Gets shared resource.
+pub trait IntoShared<S> {
+    fn into_inner(self) -> Result<S, Event>;
+}
+
 /// Creates new upsert using `UpsertRaw`.
 pub fn upsert_raw_new_func<U>(mut u: U) -> impl FnMut(&Bucket, &RawItem) -> Result<u64, Event>
 where
     U: UpsertRaw,
 {
     move |b: &Bucket, i: &RawItem| u.upsert(b, i)
+}
+
+/// Requests upserts and returns shared resource which can be used for metrics collection.
+///
+/// # Arguments
+/// - upsert: Upserts an item into a bucket using shared resource.
+/// - create: Creates a bucket using shared resource.
+/// - shared: Vendor specific shared resource for upsert/create.
+/// - requests: Data to be upserted.
+/// - upsert_value_gen: Value generator for master buckets.
+pub fn request_upsert_all_shared_ex<U, C, T, I, G>(
+    upsert: U,
+    create: C,
+    shared: T,
+    requests: I,
+    upsert_value_gen: G,
+) -> Result<T, Event>
+where
+    U: Fn(&mut T, &Bucket, &RawItem) -> Result<u64, Event>,
+    C: Fn(&mut T, &Bucket) -> Result<u64, Event>,
+    I: Iterator<Item = RawData>,
+    G: UpsertValueGenerator,
+{
+    let nop_finalize = |_: T| Ok(());
+    let mut upsert_raw = UpsertAfterCreateShared {
+        upsert,
+        create,
+        shared,
+        finalize: nop_finalize,
+    };
+    let mut upst = |b: &Bucket, i: &RawItem| create_upsert(&mut upsert_raw, b, i);
+    upsert_all_ex(requests, &mut upst, upsert_value_gen)?;
+    let shared: T = upsert_raw.into_inner()?;
+    Ok(shared)
 }
 
 /// Upserts data which creates a bucket before upsert.
@@ -92,6 +131,12 @@ struct UpsertAfterCreateShared<U, C, T, F> {
     create: C,
     shared: T,
     finalize: F,
+}
+
+impl<U, C, T, F> IntoShared<T> for UpsertAfterCreateShared<U, C, T, F> {
+    fn into_inner(self) -> Result<T, Event> {
+        Ok(self.shared)
+    }
 }
 
 impl<U, C, T, F> UpsertRaw for UpsertAfterCreateShared<U, C, T, F>
