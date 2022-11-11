@@ -12,6 +12,7 @@ mod list_bucket;
 mod remove_device;
 mod remove_stale_data;
 mod upsert;
+mod upsert_convert;
 mod upsert_with_metrics;
 
 fn sub() -> Result<(), Event> {
@@ -28,6 +29,7 @@ fn sub() -> Result<(), Event> {
     get_devices4date::get_devices4date()?;
     list::list()?;
     upsert_with_metrics::upsert_with_metrics()?;
+    upsert_convert::upsert_convert()?;
     Ok(())
 }
 

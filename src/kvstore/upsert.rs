@@ -331,6 +331,39 @@ where
         .try_fold(0, |tot, item| upsert(b, item).map(|cnt| cnt + tot))
 }
 
+/// Upserts after conversion.
+///
+/// # Arguments
+/// - source: Input data before conversion.
+/// - upsert: Upserts converted item.
+/// - upsert_value_gen: Generates value to be upserted.
+/// - conv: Converts input data.
+/// - inspect: Handle conversion result(can be used to update metrics).
+pub fn upsert_all_converted<I, U, G, C, T, M>(
+    source: I,
+    upsert: &mut U,
+    upsert_value_gen: G,
+    conv: &C,
+    inspect: &mut M,
+) -> Result<u64, Event>
+where
+    I: Iterator<Item = T>,
+    U: FnMut(&Bucket, &RawItem) -> Result<u64, Event>,
+    G: UpsertValueGenerator,
+    C: Fn(T) -> Result<RawData, Event>,
+    M: FnMut(&Result<RawData, Event>),
+{
+    let mapd = source.map(conv);
+    let inspected = mapd.inspect(inspect);
+    let noerr = inspected.flat_map(|r: Result<RawData, _>| r.ok());
+    let flat =
+        noerr.flat_map(|r: RawData| UpsertRequest::from_data(r, &upsert_value_gen).into_iter());
+    let mut pairs = flat.map(|u: UpsertRequest<_, _>| (u.bucket, u.item));
+    pairs.try_fold(0, |tot, (bucket, item)| {
+        upsert(&bucket, &item).map(|cnt| cnt + tot)
+    })
+}
+
 /// Saves data got from source which uses a closure to actually save data.
 ///
 /// Duplicates will be ignored.
