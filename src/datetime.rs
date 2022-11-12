@@ -63,3 +63,19 @@ impl TryFrom<std::time::SystemTime> for DateTime {
         Self::from_std_time(t)
     }
 }
+
+#[cfg(test)]
+mod test_datetime {
+
+    mod datetime {
+        use crate::datetime::DateTime;
+
+        #[test]
+        fn test_epoch() {
+            let dt: DateTime = DateTime::from_unixtime_us(0);
+            let dt_after_1us: DateTime = dt.add(1).unwrap();
+            let dt_epoch: DateTime = dt_after_1us.sub(1).unwrap();
+            assert_eq!(dt, dt_epoch);
+        }
+    }
+}
