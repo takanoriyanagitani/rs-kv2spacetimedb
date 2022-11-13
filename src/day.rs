@@ -21,3 +21,37 @@ impl TryFrom<u8> for Day {
         }
     }
 }
+
+#[cfg(test)]
+mod test_day {
+
+    mod day {
+
+        use crate::day::Day;
+
+        #[test]
+        fn test_min() {
+            let d: Day = Day::try_from(1).unwrap();
+            assert_eq!(d.as_raw(), 1);
+        }
+
+        #[test]
+        fn test_max() {
+            let d: Day = Day::try_from(31).unwrap();
+            assert_eq!(d.as_raw(), 31);
+        }
+
+        #[test]
+        fn test_under() {
+            let r: Result<_,_> = Day::try_from(0);
+            assert_eq!(r.is_err(), true);
+        }
+
+        #[test]
+        fn test_over() {
+            let r: Result<_,_> = Day::try_from(32);
+            assert_eq!(r.is_err(), true);
+        }
+
+    }
+}
