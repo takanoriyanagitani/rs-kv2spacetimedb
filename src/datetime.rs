@@ -77,5 +77,57 @@ mod test_datetime {
             let dt_epoch: DateTime = dt_after_1us.sub(1).unwrap();
             assert_eq!(dt, dt_epoch);
         }
+
+        #[test]
+        fn test_greater() {
+            let dt: DateTime = DateTime::from_unixtime_us(u64::MAX);
+            let dtadd: Result<_, _> = dt.add(1);
+            assert_eq!(dtadd.is_err(), true);
+        }
+
+        #[test]
+        fn test_less() {
+            let dt: DateTime = DateTime::from_unixtime_us(0);
+            let dtsub: Result<_, _> = dt.sub(1);
+            assert_eq!(dtsub.is_err(), true);
+        }
+
+        #[test]
+        fn test_unixtime() {
+            let dt: DateTime = DateTime::from_unixtime_us(1);
+            let u: u64 = dt.as_unixtime_us();
+            assert_eq!(u, 1);
+        }
+    }
+
+    mod datetime_system_time {
+        use std::time::{Duration, SystemTime};
+
+        use crate::datetime::DateTime;
+
+        #[test]
+        fn test_epoch() {
+            let epoch: SystemTime = SystemTime::UNIX_EPOCH;
+            let d: DateTime = DateTime::try_from(epoch).unwrap();
+            assert_eq!(d.as_unixtime_us(), 0);
+        }
+
+        #[test]
+        fn test_before_epoch() {
+            let epoch: SystemTime = SystemTime::UNIX_EPOCH;
+            let e_sub: SystemTime = epoch.checked_sub(Duration::from_micros(1)).unwrap();
+            let r: Result<_, _> = DateTime::from_std_time(e_sub);
+            assert_eq!(r.is_err(), true);
+        }
+
+        #[test]
+        fn test_upper() {
+            let epoch: SystemTime = SystemTime::UNIX_EPOCH;
+            let dur_max: Duration = Duration::from_micros(u64::MAX);
+            let dt_max: SystemTime = epoch.checked_add(dur_max).unwrap();
+            let dt_add: SystemTime = dt_max.checked_add(Duration::from_micros(1)).unwrap();
+            let r: Result<_, _> = DateTime::try_from(dt_add);
+            assert_eq!(r.is_err(), true);
+        }
     }
 }
