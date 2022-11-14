@@ -1,6 +1,6 @@
 use crate::evt::Event;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Month {
     Jan,
     Feb,
@@ -58,6 +58,67 @@ impl TryFrom<u8> for Month {
             11 => Ok(Self::Nov),
             12 => Ok(Self::Dec),
             _ => Err(Event::InvalidMonth(format!("Invalid month number: {}", u))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_month {
+
+    mod month {
+        use crate::month::Month;
+
+        #[test]
+        fn test_min() {
+            let m: Month = Month::try_from(1).unwrap();
+            assert_eq!(m, Month::Jan);
+        }
+
+        #[test]
+        fn test_max() {
+            let m: Month = Month::try_from(12).unwrap();
+            assert_eq!(m, Month::Dec);
+        }
+
+        #[test]
+        fn test_conv() {
+            assert_eq!(Month::try_from(1).unwrap(), Month::Jan);
+            assert_eq!(Month::try_from(2).unwrap(), Month::Feb);
+            assert_eq!(Month::try_from(3).unwrap(), Month::Mar);
+            assert_eq!(Month::try_from(4).unwrap(), Month::Apr);
+            assert_eq!(Month::try_from(5).unwrap(), Month::May);
+            assert_eq!(Month::try_from(6).unwrap(), Month::Jun);
+            assert_eq!(Month::try_from(7).unwrap(), Month::Jul);
+            assert_eq!(Month::try_from(8).unwrap(), Month::Aug);
+            assert_eq!(Month::try_from(9).unwrap(), Month::Sep);
+            assert_eq!(Month::try_from(10).unwrap(), Month::Oct);
+            assert_eq!(Month::try_from(11).unwrap(), Month::Nov);
+            assert_eq!(Month::try_from(12).unwrap(), Month::Dec);
+
+            assert_eq!(Month::Jan.as_raw(), 1);
+            assert_eq!(Month::Feb.as_raw(), 2);
+            assert_eq!(Month::Mar.as_raw(), 3);
+            assert_eq!(Month::Apr.as_raw(), 4);
+            assert_eq!(Month::May.as_raw(), 5);
+            assert_eq!(Month::Jun.as_raw(), 6);
+            assert_eq!(Month::Jul.as_raw(), 7);
+            assert_eq!(Month::Aug.as_raw(), 8);
+            assert_eq!(Month::Sep.as_raw(), 9);
+            assert_eq!(Month::Oct.as_raw(), 10);
+            assert_eq!(Month::Nov.as_raw(), 11);
+            assert_eq!(Month::Dec.as_raw(), 12);
+        }
+
+        #[test]
+        fn test_under() {
+            let r: Result<_, _> = Month::try_from(0);
+            assert_eq!(r.is_err(), true);
+        }
+
+        #[test]
+        fn test_over() {
+            let r: Result<_, _> = Month::try_from(13);
+            assert_eq!(r.is_err(), true);
         }
     }
 }

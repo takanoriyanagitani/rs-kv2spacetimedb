@@ -43,15 +43,14 @@ mod test_day {
 
         #[test]
         fn test_under() {
-            let r: Result<_,_> = Day::try_from(0);
+            let r: Result<_, _> = Day::try_from(0);
             assert_eq!(r.is_err(), true);
         }
 
         #[test]
         fn test_over() {
-            let r: Result<_,_> = Day::try_from(32);
+            let r: Result<_, _> = Day::try_from(32);
             assert_eq!(r.is_err(), true);
         }
-
     }
 }
