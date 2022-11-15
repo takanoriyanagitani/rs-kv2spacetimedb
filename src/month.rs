@@ -1,6 +1,6 @@
 use crate::evt::Event;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Month {
     Jan,
     Feb,
