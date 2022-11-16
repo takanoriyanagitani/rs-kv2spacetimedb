@@ -171,6 +171,10 @@ impl<K, V> UpsertRequest<K, V> {
     fn new(bucket: Bucket, item: Item<K, V>) -> Self {
         Self { bucket, item }
     }
+
+    fn into_pair(self) -> (Bucket, Item<K, V>) {
+        (self.bucket, self.item)
+    }
 }
 
 /// Generates value for master buckets.
@@ -311,6 +315,19 @@ impl UpsertRequest<Vec<u8>, Vec<u8>> {
             }
         })
     }
+}
+
+/// Converts single key/value pair(with device/date info) into (bucket/item) pairs.
+///
+/// # Arguments
+/// - r: Key/value pair with device/date info to be converted.
+/// - upsert_value_gen: Generates value to be upserted.
+pub fn rawdata2pairs<G>(r: RawData, upsert_value_gen: &G) -> impl Iterator<Item = (Bucket, RawItem)>
+where
+    G: UpsertValueGenerator,
+{
+    let reqs: Vec<UpsertRequest<Vec<u8>, Vec<u8>>> = UpsertRequest::from_data(r, upsert_value_gen);
+    reqs.into_iter().map(|u: UpsertRequest<_, _>| u.into_pair())
 }
 
 fn rawdata2requests<I, G>(i: I, upsert_value_gen: G) -> impl Iterator<Item = (Bucket, Vec<RawItem>)>
