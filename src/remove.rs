@@ -194,4 +194,16 @@ mod test_remove {
             assert_eq!(b, false);
         }
     }
+
+    mod is_drop_target_device {
+        use crate::remove;
+        use crate::{bucket::Bucket, device::Device};
+
+        #[test]
+        fn test_dates_master_for_device() {
+            let b: Bucket = Bucket::from(String::from("dates_cafef00ddeadbeafface864299792458"));
+            let d: Device = Device::new_unchecked("cafef00ddeadbeafface864299792458".into());
+            assert_eq!(remove::is_drop_target_device(&b, &d), true);
+        }
+    }
 }
