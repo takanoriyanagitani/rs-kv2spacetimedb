@@ -205,5 +205,14 @@ mod test_remove {
             let d: Device = Device::new_unchecked("cafef00ddeadbeafface864299792458".into());
             assert_eq!(remove::is_drop_target_device(&b, &d), true);
         }
+
+        #[test]
+        fn test_data_bucket() {
+            let b: Bucket = Bucket::from(String::from(
+                "data_2022_11_19_cafef00ddeadbeafface864299792458",
+            ));
+            let d: Device = Device::new_unchecked("cafef00ddeadbeafface864299792458".into());
+            assert_eq!(remove::is_drop_target_device(&b, &d), true);
+        }
     }
 }
