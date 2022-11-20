@@ -226,5 +226,14 @@ mod test_remove {
             let d: Date = Date::new_unchecked("2022_11_20".into());
             assert_eq!(remove::is_drop_target(&b, &d), true);
         }
+
+        #[test]
+        fn test_data_bucket() {
+            let b: Bucket = Bucket::from(String::from(
+                "data_2022_11_21_cafef00ddeadbeafface864299792458",
+            ));
+            let d: Date = Date::new_unchecked("2022_11_21".into());
+            assert_eq!(remove::is_drop_target(&b, &d), true);
+        }
     }
 }
