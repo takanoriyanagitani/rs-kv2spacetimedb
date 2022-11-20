@@ -215,4 +215,16 @@ mod test_remove {
             assert_eq!(remove::is_drop_target_device(&b, &d), true);
         }
     }
+
+    mod is_drop_target {
+        use crate::remove;
+        use crate::{bucket::Bucket, date::Date};
+
+        #[test]
+        fn test_devices_for_date_master() {
+            let b: Bucket = Bucket::from(String::from("devices_2022_11_20"));
+            let d: Date = Date::new_unchecked("2022_11_20".into());
+            assert_eq!(remove::is_drop_target(&b, &d), true);
+        }
+    }
 }
