@@ -236,4 +236,15 @@ mod test_remove {
             assert_eq!(remove::is_drop_target(&b, &d), true);
         }
     }
+
+    mod is_delete_target_device {
+        use crate::bucket::Bucket;
+        use crate::remove;
+
+        #[test]
+        fn test_devices_master() {
+            let b: Bucket = Bucket::from(String::from("devices"));
+            assert_eq!(remove::is_delete_target_device(&b), true);
+        }
+    }
 }
