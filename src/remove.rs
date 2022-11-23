@@ -246,5 +246,11 @@ mod test_remove {
             let b: Bucket = Bucket::from(String::from("devices"));
             assert_eq!(remove::is_delete_target_device(&b), true);
         }
+
+        #[test]
+        fn test_devices4date_master() {
+            let b: Bucket = Bucket::from(String::from("devices_2022_11_23"));
+            assert_eq!(remove::is_delete_target_device(&b), true);
+        }
     }
 }
