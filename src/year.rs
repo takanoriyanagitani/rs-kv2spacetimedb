@@ -20,3 +20,18 @@ impl TryFrom<u16> for Year {
         }
     }
 }
+
+#[cfg(test)]
+mod test_year {
+
+    mod try_from {
+
+        use crate::year;
+
+        #[test]
+        fn test_invalid() {
+            let r: Result<_, _> = year::Year::try_from(0);
+            assert_eq!(r.is_err(), true);
+        }
+    }
+}
