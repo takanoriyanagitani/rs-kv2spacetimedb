@@ -588,4 +588,35 @@ mod test_upsert {
             assert_eq!(cnt, 0);
         }
     }
+
+    mod rawdata2pairs {
+        use crate::{
+            data::{Data, RawData},
+            date::Date,
+            device::Device,
+            item::Item,
+            kvstore::upsert,
+        };
+
+        #[test]
+        fn test_epoch() {
+            let d: RawData = Data::new(
+                Device::new_unchecked("cafef00ddeadbeafface864299792458".into()),
+                Date::new_unchecked("1970_01_01".into()),
+                Item::new(
+                    b"00:00:00.0Z".to_vec(),
+                    r#"{
+                        "timestamp": "1970-01-01T00:00:00.0Z",
+                        "data":[]
+                    }"#
+                    .as_bytes()
+                    .to_vec(),
+                ),
+            );
+
+            let gen = upsert::upsert_value_generator_new_func_default();
+            let pairs: Vec<_> = upsert::rawdata2pairs(d, &gen).collect();
+            assert_eq!(pairs.len(), 5);
+        }
+    }
 }
