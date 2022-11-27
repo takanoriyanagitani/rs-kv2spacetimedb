@@ -73,4 +73,23 @@ mod test_item {
             );
         }
     }
+
+    mod raw {
+        use crate::item::{Item, RawItem};
+
+        #[test]
+        fn test_ascii() {
+            let i: RawItem = Item::new(b"key".to_vec(), b"42".to_vec());
+
+            let kr: &[u8] = i.as_key();
+            assert_eq!(kr, b"key");
+
+            let vr: &[u8] = i.as_val();
+            assert_eq!(vr, b"42");
+
+            let (k, v) = i.into_pair();
+            assert_eq!(&k, b"key");
+            assert_eq!(&v, b"42");
+        }
+    }
 }
