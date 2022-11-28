@@ -36,3 +36,17 @@ impl Device {
         self.as_str().as_bytes()
     }
 }
+
+#[cfg(test)]
+mod test_device {
+
+    mod device_from_u128 {
+        use crate::device::Device;
+
+        #[test]
+        fn test_zero() {
+            let d: Device = Device::from(0x00000000_0000_0000_0000_000000000000);
+            assert_eq!(d.as_str(), "00000000000000000000000000000000");
+        }
+    }
+}
