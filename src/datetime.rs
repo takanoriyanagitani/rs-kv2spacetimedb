@@ -130,4 +130,16 @@ mod test_datetime {
             assert_eq!(r.is_err(), true);
         }
     }
+
+    mod time_source_new_std {
+        use crate::datetime::DateTime;
+
+        #[test]
+        #[ignore]
+        fn test_ok() {
+            let f = DateTime::time_source_new_std();
+            let r: Result<_, _> = f();
+            assert_eq!(r.is_ok(), true);
+        }
+    }
 }
