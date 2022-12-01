@@ -134,3 +134,19 @@ impl TryFrom<&[u8]> for Bucket {
         Ok(Self::from(String::from(name)))
     }
 }
+
+#[cfg(test)]
+mod test_bucket {
+
+    mod conv {
+
+        use crate::bucket::Bucket;
+
+        #[test]
+        fn test_bucket2string() {
+            let b: Bucket = Bucket::from(String::from("dates"));
+            let s: String = b.into();
+            assert_eq!(s, "dates");
+        }
+    }
+}
