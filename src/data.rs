@@ -1,3 +1,5 @@
+//! Key/value pair with device/date info.
+
 use crate::{date::Date, device::Device, item::Item};
 
 /// A single Key/Value Data with ID(`Device`) and `Date`.

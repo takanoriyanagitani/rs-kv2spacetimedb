@@ -1,3 +1,5 @@
+//! Date info which can be used as a part of bucket name.
+
 use crate::{day::Day, month::Month, year::Year};
 
 /// Date info container which contains year/month/date.

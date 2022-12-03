@@ -1,3 +1,5 @@
+//! Key value pairs container.
+
 use crate::{date::Date, device::Device, evt::Event};
 
 /// ID(name) of a container which may contain many key/value pairs.
