@@ -1,3 +1,5 @@
+//! Simple Date/Time.
+
 use crate::evt::Event;
 
 /// Non-monotonic Date/Time which counts micro seconds from the unix epoch.
