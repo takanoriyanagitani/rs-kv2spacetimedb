@@ -1,3 +1,5 @@
+//! Simple Day(1,2,3, ..., 31)
+
 use crate::evt::Event;
 
 /// Simple "Day" like number(1..=31) which does not care a month nor a leap year.
