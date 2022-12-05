@@ -1,3 +1,5 @@
+//! Device ID which can be used as a part of bucket name.
+
 /// Device info container.
 pub struct Device {
     id: String, // cafef00d-dead-beaf-face-864299792458 => cafef00ddeadbeafface864299792458
