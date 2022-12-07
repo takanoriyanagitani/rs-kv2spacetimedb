@@ -1,3 +1,5 @@
+//! An Item(key/value pair)
+
 use std::collections::BTreeSet;
 
 /// A Key/Value pair.
