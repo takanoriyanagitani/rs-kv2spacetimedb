@@ -1,3 +1,5 @@
+//! List of events(errors).
+
 use crate::count::Count;
 
 /// List of request handle results.
