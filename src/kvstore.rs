@@ -1,3 +1,5 @@
+//! Key/Value store modules.
+
 pub mod bucket;
 pub mod count;
 pub mod create;
