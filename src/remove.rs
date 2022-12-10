@@ -1,3 +1,5 @@
+//! Removes buckets or keys by date or device.
+
 use crate::{
     bucket::Bucket, date::Date, day::Day, device::Device, evt::Event, month::Month, year::Year,
 };
