@@ -1,3 +1,5 @@
+//! Simple Month(Jan, Feb, Mar, ... , Dec)
+
 use crate::evt::Event;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
