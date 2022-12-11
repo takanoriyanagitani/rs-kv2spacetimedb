@@ -1,3 +1,5 @@
+//! Simple Year(1,2,3, ... , 65535)
+
 use crate::evt::Event;
 
 pub struct Year {
